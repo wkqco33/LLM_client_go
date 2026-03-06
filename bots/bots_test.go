@@ -352,7 +352,7 @@ func TestOpenAIBackend_WithSession_ConversationFlow(t *testing.T) {
 		}
 		json.NewEncoder(w).Encode(openai.ChatResponse{
 			Choices: []openai.Choice{{
-				Message: llm.Message{Role: llm.RoleAssistant, Content: "reply"},
+				Message:      llm.Message{Role: llm.RoleAssistant, Content: "reply"},
 				FinishReason: "stop",
 			}},
 		})
