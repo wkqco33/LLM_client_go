@@ -24,6 +24,9 @@ ALL_BINS    := $(BOTS) $(EXAMPLES)
 LDFLAGS     := -s -w
 GOFLAGS     := -trimpath
 
+# 크로스컴파일 대상 플랫폼 (OS/ARCH)
+PLATFORMS   := linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64
+
 .DEFAULT_GOAL := help
 
 # ─── 도움말 ────────────────────────────────────────────────
@@ -78,6 +81,45 @@ build/all: build ## build 와 동일 (전체 빌드)
 
 $(BUILD_DIR):
 	mkdir -p $(BUILD_DIR)
+
+# ─── 크로스컴파일 ──────────────────────────────────────────
+
+.PHONY: build/cross
+build/cross: build/cross/bots build/cross/examples ## 전 플랫폼 크로스컴파일 (bots + examples)
+
+.PHONY: build/cross/bots
+build/cross/bots: ## 봇 바이너리 크로스컴파일 (bin/<os>_<arch>/)
+	@echo "▶ Cross-compiling bots for: $(PLATFORMS)"
+	@for platform in $(PLATFORMS); do \
+		os=$$(echo $$platform | cut -d/ -f1); \
+		arch=$$(echo $$platform | cut -d/ -f2); \
+		outdir=$(BUILD_DIR)/$${os}_$${arch}; \
+		mkdir -p $$outdir; \
+		echo "  [$$os/$$arch]"; \
+		for name in $(BOTS); do \
+			out=$$outdir/$$name; \
+			[ "$$os" = "windows" ] && out=$${out}.exe; \
+			echo "    → $$name"; \
+			GOOS=$$os GOARCH=$$arch go build $(GOFLAGS) -ldflags "$(LDFLAGS)" -o $$out ./examples/$$name || exit 1; \
+		done; \
+	done
+
+.PHONY: build/cross/examples
+build/cross/examples: ## 예제 바이너리 크로스컴파일 (bin/<os>_<arch>/)
+	@echo "▶ Cross-compiling examples for: $(PLATFORMS)"
+	@for platform in $(PLATFORMS); do \
+		os=$$(echo $$platform | cut -d/ -f1); \
+		arch=$$(echo $$platform | cut -d/ -f2); \
+		outdir=$(BUILD_DIR)/$${os}_$${arch}; \
+		mkdir -p $$outdir; \
+		echo "  [$$os/$$arch]"; \
+		for name in $(EXAMPLES); do \
+			out=$$outdir/$$name; \
+			[ "$$os" = "windows" ] && out=$${out}.exe; \
+			echo "    → $$name"; \
+			GOOS=$$os GOARCH=$$arch go build $(GOFLAGS) -ldflags "$(LDFLAGS)" -o $$out ./examples/$$name || exit 1; \
+		done; \
+	done
 
 # ─── 실행 ──────────────────────────────────────────────────
 

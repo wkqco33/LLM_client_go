@@ -60,7 +60,7 @@ func ForceToolChoice(functionName string) llm.SpecificToolChoice {
 
 // CollectToolCalls assembles all streamed ToolCallDelta fragments into a slice of llm.ToolCall.
 // Pass the accumulated deltas from all chunks for a single message.
-func CollectToolCalls(deltas []ToolCallDelta) []llm.ToolCall {
+func CollectToolCalls(deltas []llm.ToolCallDelta) []llm.ToolCall {
 	// Index → assembled ToolCall
 	indexed := make(map[int]*llm.ToolCall)
 	order := []int{}

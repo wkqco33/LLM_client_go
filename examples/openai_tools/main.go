@@ -8,13 +8,39 @@ import (
 	"os"
 
 	llm "llm-client-go"
+	"llm-client-go/agent"
 	"llm-client-go/examples/internal/dotenv"
 	"llm-client-go/openai"
 )
 
-// getWeather is a mock tool implementation.
-func getWeather(city string) string {
-	return fmt.Sprintf("The weather in %s is sunny and 22°C.", city)
+// weatherTool is our local executable tool.
+type weatherTool struct{}
+
+func (w *weatherTool) Definition() llm.Tool {
+	return openai.NewTool("get_weather", "Get the current weather for a city", map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"city": map[string]any{
+				"type":        "string",
+				"description": "The name of the city",
+			},
+		},
+		"required": []string{"city"},
+	})
+}
+
+// Execute is called automatically by the Agent Runner when the model requests it.
+func (w *weatherTool) Execute(ctx context.Context, arguments string) (string, error) {
+	var args map[string]string
+	if err := json.Unmarshal([]byte(arguments), &args); err != nil {
+		return "", err
+	}
+	city := args["city"]
+
+	fmt.Printf(">> [Local Execution] Fetching weather for %s...\n", city)
+
+	// In a real app, you would call an external weather API here.
+	return fmt.Sprintf("The weather in %s is sunny and 22°C.", city), nil
 }
 
 func main() {
@@ -26,67 +52,31 @@ func main() {
 		APIKey: os.Getenv("OPENAI_API_KEY"),
 	})
 
-	weatherTool := openai.NewTool("get_weather", "Get the current weather for a city", map[string]any{
-		"type": "object",
-		"properties": map[string]any{
-			"city": map[string]any{
-				"type":        "string",
-				"description": "The name of the city",
-			},
-		},
-		"required": []string{"city"},
-	})
+	// Create an Agent Runner
+	runner := agent.NewRunner(client, "gpt-4o", agent.WithSystemPrompt("You are a helpful assistant."))
+	runner.RegisterTool(&weatherTool{})
 
-	messages := []llm.Message{
+	// Start the conversation
+	fmt.Println("User: What's the weather like in Tokyo?")
+	msgs, finalResp, err := runner.Run(context.Background(), []llm.Message{
 		openai.NewUserMessage("What's the weather like in Tokyo?"),
-	}
-
-	// First turn: model may request a tool call
-	resp, err := client.Chat.Complete(context.Background(), openai.ChatRequest{
-		Model:    "gpt-4o",
-		Messages: messages,
-		Tools:    []llm.Tool{weatherTool},
-	})
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	assistantMsg := resp.Choices[0].Message
-	fmt.Printf("Finish reason: %s\n", resp.Choices[0].FinishReason)
-
-	if resp.Choices[0].FinishReason != "tool_calls" {
-		// No tool call requested; print and exit
-		fmt.Println(assistantMsg.Content)
-		return
-	}
-
-	// Append the assistant message (with ToolCalls) to the conversation
-	messages = append(messages, assistantMsg)
-
-	// Execute each tool call and append the results
-	for _, tc := range assistantMsg.ToolCalls {
-		fmt.Printf("Calling tool: %s(%s)\n", tc.Function.Name, tc.Function.Arguments)
-
-		var args map[string]string
-		if err := json.Unmarshal([]byte(tc.Function.Arguments), &args); err != nil {
-			log.Fatal(err)
-		}
-
-		result := getWeather(args["city"])
-		fmt.Printf("Tool result: %s\n", result)
-
-		messages = append(messages, openai.NewToolResultMessage(tc.ID, result))
-	}
-
-	// Second turn: send tool results back to the model
-	finalResp, err := client.Chat.Complete(context.Background(), openai.ChatRequest{
-		Model:    "gpt-4o",
-		Messages: messages,
-		Tools:    []llm.Tool{weatherTool},
 	})
 	if err != nil {
 		log.Fatal(err)
 	}
 
 	fmt.Printf("\nAssistant: %s\n", finalResp.Choices[0].Message.Content)
+
+	// (Optional) Print the full message history to see the internal tool calls
+	fmt.Println("\n--- Full Conversation History ---")
+	for _, m := range msgs {
+		role := string(m.Role)
+		if m.Role == llm.RoleAssistant && len(m.ToolCalls) > 0 {
+			fmt.Printf("[%s] (Tool Call: %s)\n", role, m.ToolCalls[0].Function.Name)
+		} else if m.Role == llm.RoleTool {
+			fmt.Printf("[%s] %s\n", role, m.Content)
+		} else {
+			fmt.Printf("[%s] %s\n", role, m.Content)
+		}
+	}
 }

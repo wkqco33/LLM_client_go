@@ -19,12 +19,14 @@ Discord, Telegram, Slack 봇을 설정하고 LLM 클라이언트와 연결하는
 
 ### 1. LLM API 키 발급
 
-**OpenAI 사용 시**
+#### **OpenAI 사용 시**
+
 1. [platform.openai.com](https://platform.openai.com) 로그인
 2. **API keys** → **Create new secret key**
 3. 생성된 키를 `OPENAI_API_KEY` 환경변수에 설정
 
-**Azure OpenAI 사용 시**
+#### **Azure OpenAI 사용 시**
+
 1. [Azure Portal](https://portal.azure.com) → **Azure OpenAI** 리소스 생성
 2. **Keys and Endpoint** 탭에서 키와 엔드포인트 확인
 3. **Model deployments** 탭에서 배포 이름 확인
@@ -51,9 +53,11 @@ go mod download
 ### 봇 권한 설정
 
 **Bot** 탭 → **Privileged Gateway Intents** 에서 아래 항목 활성화:
+
 - ✅ **Message Content Intent** (메시지 내용 읽기에 필수)
 
 **OAuth2 → URL Generator** 탭:
+
 - Scopes: `bot` 체크
 - Bot Permissions: `Send Messages`, `Read Message History` 체크
 - 생성된 URL로 접속하여 봇을 서버에 초대
@@ -70,7 +74,7 @@ go run examples/discord_bot/main.go
 ### Discord 봇 사용법
 
 | 동작 | 방법 |
-|---|---|
+| - | - |
 | 봇과 대화 | 봇이 있는 채널에서 메시지 전송 |
 | DM 대화 | 봇에게 다이렉트 메시지 전송 |
 | 대화 초기화 | `!reset` 입력 |
@@ -94,11 +98,11 @@ go run examples/discord_bot/main.go
 
 BotFather에서 `/setcommands` 입력 후 아래 내용 붙여넣기:
 
-```
+```bash
 reset - 대화 기록을 초기화합니다
 ```
 
-### 봇 실행
+### Telegram 봇 실행
 
 ```bash
 export TELEGRAM_BOT_TOKEN="123456789:ABCdefGHIjklMNOpqrSTUvwxyz"
@@ -110,7 +114,7 @@ go run examples/telegram_bot/main.go
 ### Telegram 봇 사용법
 
 | 동작 | 방법 |
-|---|---|
+| - | - |
 | 봇과 대화 | 봇에게 메시지 전송 (DM 또는 그룹에서 초대 후 사용) |
 | 대화 초기화 | `/reset` 입력 |
 
@@ -157,7 +161,7 @@ Slack 봇은 **Socket Mode**를 사용하므로 공개 서버 없이도 로컬�
    - `app_mention` — 채널에서 @멘션
    - `message.im` — DM 메시지
 
-### 봇 실행
+### Slack 봇 실행
 
 ```bash
 export SLACK_BOT_TOKEN="xoxb-your-bot-token"
@@ -170,7 +174,7 @@ go run examples/slack_bot/main.go
 ### Slack 봇 사용법
 
 | 동작 | 방법 |
-|---|---|
+| - | - |
 | 채널에서 대화 | `@봇이름 메시지` 형식으로 멘션 |
 | DM 대화 | 봇에게 다이렉트 메시지 전송 |
 | 대화 초기화 | `!reset` 입력 |
@@ -182,7 +186,7 @@ go run examples/slack_bot/main.go
 ## 환경변수 정리
 
 | 변수명 | 설명 | 필수 |
-|---|---|---|
+| - | - | - |
 | `OPENAI_API_KEY` | OpenAI API 키 | OpenAI 사용 시 |
 | `OPENAI_MODEL` | 사용할 모델 (기본값: `gpt-4o`) | 선택 |
 | `AZURE_OPENAI_ENDPOINT` | Azure OpenAI 엔드포인트 URL | Azure 사용 시 |

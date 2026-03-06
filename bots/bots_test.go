@@ -244,8 +244,8 @@ func TestSession_ConcurrentAccess_NoDataRace(t *testing.T) {
 
 func TestOpenAIBackend_Complete_Success(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(openai.ChatResponse{
-			Choices: []openai.Choice{{
+		json.NewEncoder(w).Encode(llm.ChatResponse{
+			Choices: []llm.Choice{{
 				Message:      llm.Message{Role: llm.RoleAssistant, Content: "42"},
 				FinishReason: "stop",
 			}},
@@ -272,8 +272,8 @@ func TestOpenAIBackend_Complete_ForwardsModel(t *testing.T) {
 		if body["model"] != "gpt-4o-mini" {
 			t.Errorf("expected model='gpt-4o-mini', got %v", body["model"])
 		}
-		json.NewEncoder(w).Encode(openai.ChatResponse{
-			Choices: []openai.Choice{{Message: llm.Message{Content: "ok"}, FinishReason: "stop"}},
+		json.NewEncoder(w).Encode(llm.ChatResponse{
+			Choices: []llm.Choice{{Message: llm.Message{Content: "ok"}, FinishReason: "stop"}},
 		})
 	}))
 	defer srv.Close()
@@ -303,7 +303,7 @@ func TestOpenAIBackend_Complete_WrapsAPIError(t *testing.T) {
 
 func TestOpenAIBackend_Complete_EmptyChoices_ReturnsError(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(openai.ChatResponse{Choices: []openai.Choice{}})
+		json.NewEncoder(w).Encode(llm.ChatResponse{Choices: []llm.Choice{}})
 	}))
 	defer srv.Close()
 
@@ -323,8 +323,8 @@ func TestOpenAIBackend_Complete_FullConversation(t *testing.T) {
 		if len(msgs) != 3 {
 			t.Errorf("expected 3 messages in request, got %d", len(msgs))
 		}
-		json.NewEncoder(w).Encode(openai.ChatResponse{
-			Choices: []openai.Choice{{Message: llm.Message{Content: "ok"}, FinishReason: "stop"}},
+		json.NewEncoder(w).Encode(llm.ChatResponse{
+			Choices: []llm.Choice{{Message: llm.Message{Content: "ok"}, FinishReason: "stop"}},
 		})
 	}))
 	defer srv.Close()
@@ -350,8 +350,8 @@ func TestOpenAIBackend_WithSession_ConversationFlow(t *testing.T) {
 		if callCount == 2 && len(msgs) < 3 {
 			t.Errorf("second call should include conversation history, got %d msgs", len(msgs))
 		}
-		json.NewEncoder(w).Encode(openai.ChatResponse{
-			Choices: []openai.Choice{{
+		json.NewEncoder(w).Encode(llm.ChatResponse{
+			Choices: []llm.Choice{{
 				Message:      llm.Message{Role: llm.RoleAssistant, Content: "reply"},
 				FinishReason: "stop",
 			}},

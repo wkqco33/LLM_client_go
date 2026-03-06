@@ -16,11 +16,12 @@ func main() {
 		log.Fatalf("failed to load .env: %v", err)
 	}
 
-	client := openai.New(openai.Config{
+	// openai.Client implements llm.Client interface
+	var client llm.Client = openai.New(openai.Config{
 		APIKey: os.Getenv("OPENAI_API_KEY"),
 	})
 
-	resp, err := client.Chat.Complete(context.Background(), openai.ChatRequest{
+	resp, err := client.Complete(context.Background(), llm.ChatRequest{
 		Model: "gpt-4o",
 		Messages: []llm.Message{
 			openai.NewSystemMessage("You are a helpful assistant."),

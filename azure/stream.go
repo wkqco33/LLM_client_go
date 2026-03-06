@@ -18,49 +18,12 @@ type Stream struct {
 	closed  bool
 }
 
-// ChatStreamChunk is a single SSE delta from the Azure streaming response.
-type ChatStreamChunk struct {
-	ID      string         `json:"id"`
-	Object  string         `json:"object"`
-	Created int64          `json:"created"`
-	Model   string         `json:"model"`
-	Choices []StreamChoice `json:"choices"`
-	Usage   *llm.Usage     `json:"usage,omitempty"`
-}
-
-// StreamChoice is a single delta in a streaming chunk.
-type StreamChoice struct {
-	Index        int     `json:"index"`
-	Delta        Delta   `json:"delta"`
-	FinishReason *string `json:"finish_reason"`
-}
-
-// Delta carries the incremental content in a stream chunk.
-type Delta struct {
-	Role      llm.Role        `json:"role,omitempty"`
-	Content   string          `json:"content,omitempty"`
-	ToolCalls []ToolCallDelta `json:"tool_calls,omitempty"`
-}
-
-// ToolCallDelta carries incremental tool call data in a stream chunk.
-type ToolCallDelta struct {
-	Index    int               `json:"index"`
-	ID       string            `json:"id,omitempty"`
-	Type     string            `json:"type,omitempty"`
-	Function FunctionCallDelta `json:"function,omitempty"`
-}
-
-// FunctionCallDelta carries partial function call information.
-type FunctionCallDelta struct {
-	Name      string `json:"name,omitempty"`
-	Arguments string `json:"arguments,omitempty"`
-}
-
 // Stream starts a streaming chat completion request to Azure OpenAI.
 // The caller must call Close() on the returned Stream when done.
-func (s *ChatService) Stream(ctx context.Context, req ChatRequest) (*Stream, error) {
+func (s *ChatService) Stream(ctx context.Context, req llm.ChatRequest) (llm.Stream, error) {
 	req.Stream = true
-	url := s.client.deploymentURL(req.DeploymentName, "/chat/completions")
+	// In Azure, the "Model" in the common request is used as the DeploymentName.
+	url := s.client.deploymentURL(req.Model, "/chat/completions")
 
 	resp, err := s.client.do(ctx, http.MethodPost, url, req)
 	if err != nil {
@@ -80,7 +43,7 @@ func (s *ChatService) Stream(ctx context.Context, req ChatRequest) (*Stream, err
 // Next reads the next chunk from the stream.
 // Returns (nil, nil) when the stream ends with [DONE].
 // Returns (nil, llm.ErrStreamClosed) if the stream has already been closed.
-func (s *Stream) Next() (*ChatStreamChunk, error) {
+func (s *Stream) Next() (*llm.ChatStreamChunk, error) {
 	if s.closed {
 		return nil, llm.ErrStreamClosed
 	}
@@ -97,7 +60,7 @@ func (s *Stream) Next() (*ChatStreamChunk, error) {
 			return nil, nil
 		}
 
-		var chunk ChatStreamChunk
+		var chunk llm.ChatStreamChunk
 		if err := json.Unmarshal([]byte(data), &chunk); err != nil {
 			return nil, fmt.Errorf("azure: parse stream chunk: %w", err)
 		}

@@ -1,6 +1,5 @@
-// Package openai provides a client for the OpenAI Chat Completions API,
-// including streaming and function calling support.
-package openai
+// Package anthropic provides a client for the Anthropic Messages API.
+package anthropic
 
 import (
 	"bytes"
@@ -15,16 +14,18 @@ import (
 	"llm-client-go/retry"
 )
 
-const defaultBaseURL = "https://api.openai.com/v1"
+const defaultBaseURL = "https://api.anthropic.com/v1"
+const defaultAPIVersion = "2023-06-01"
 const defaultTimeout = 60 * time.Second
 
-// Client is the OpenAI API client.
+// Client is the Anthropic API client.
 type Client struct {
 	apiKey     string
+	apiVersion string
 	baseURL    string
 	httpClient *http.Client
 
-	// Chat exposes the Chat Completions API.
+	// Chat exposes the Messages API.
 	Chat *ChatService
 }
 
@@ -39,36 +40,27 @@ func (c *Client) Stream(ctx context.Context, req llm.ChatRequest) (llm.Stream, e
 }
 
 // CreateEmbeddings implements the llm.Client interface.
+// Note: Anthropic does not provide an embeddings API directly.
 func (c *Client) CreateEmbeddings(ctx context.Context, req llm.EmbeddingRequest) (*llm.EmbeddingResponse, error) {
-	resp, err := c.do(ctx, http.MethodPost, "/embeddings", req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, parseErrorResponse(resp)
-	}
-
-	var result llm.EmbeddingResponse
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return nil, fmt.Errorf("openai: decode embedding response: %w", err)
-	}
-	return &result, nil
+	return nil, fmt.Errorf("anthropic: embeddings API is not supported by this provider")
 }
 
 // TokenCounter implements the llm.Client interface.
 func (c *Client) TokenCounter(model string) any {
-	return nil // Use default token estimator if not specialized
+	return nil
 }
 
-// Config holds configuration for the OpenAI client.
+// Config holds configuration for the Anthropic client.
 type Config struct {
-	// APIKey is the OpenAI API key (required).
+	// APIKey is the Anthropic API key (required).
 	APIKey string
 
+	// APIVersion overrides the default API version.
+	// Defaults to "2023-06-01".
+	APIVersion string
+
 	// BaseURL overrides the default API endpoint.
-	// Defaults to https://api.openai.com/v1
+	// Defaults to https://api.anthropic.com/v1
 	BaseURL string
 
 	// HTTPClient overrides the default HTTP client.
@@ -82,7 +74,7 @@ type Config struct {
 	RetryPolicy *retry.Policy
 }
 
-// Option is a functional option for configuring the client after construction.
+// Option is a functional option for configuring the client.
 type Option func(*Client)
 
 // WithBaseURL sets a custom base URL.
@@ -107,11 +99,16 @@ func WithRetryPolicy(p retry.Policy) Option {
 	}
 }
 
-// New creates a new OpenAI Client from the provided Config.
+// New creates a new Anthropic Client from the provided Config.
 func New(cfg Config, opts ...Option) *Client {
 	baseURL := cfg.BaseURL
 	if baseURL == "" {
 		baseURL = defaultBaseURL
+	}
+
+	apiVersion := cfg.APIVersion
+	if apiVersion == "" {
+		apiVersion = defaultAPIVersion
 	}
 
 	timeout := cfg.Timeout
@@ -124,12 +121,14 @@ func New(cfg Config, opts ...Option) *Client {
 		hc = &http.Client{Timeout: timeout}
 	}
 
+	// Apply retry policy from config if provided
 	if cfg.RetryPolicy != nil {
 		hc.Transport = retry.NewRoundTripper(hc.Transport, *cfg.RetryPolicy)
 	}
 
 	c := &Client{
 		apiKey:     cfg.APIKey,
+		apiVersion: apiVersion,
 		baseURL:    baseURL,
 		httpClient: hc,
 	}
@@ -142,28 +141,29 @@ func New(cfg Config, opts ...Option) *Client {
 	return c
 }
 
-// do executes an HTTP request with OpenAI auth headers.
+// do executes an HTTP request with Anthropic auth headers.
 func (c *Client) do(ctx context.Context, method, path string, body any) (*http.Response, error) {
 	var reqBody io.Reader
 	if body != nil {
 		data, err := json.Marshal(body)
 		if err != nil {
-			return nil, fmt.Errorf("openai: marshal request: %w", err)
+			return nil, fmt.Errorf("anthropic: marshal request: %w", err)
 		}
 		reqBody = bytes.NewReader(data)
 	}
 
 	req, err := http.NewRequestWithContext(ctx, method, c.baseURL+path, reqBody)
 	if err != nil {
-		return nil, fmt.Errorf("openai: create request: %w", err)
+		return nil, fmt.Errorf("anthropic: create request: %w", err)
 	}
 
-	req.Header.Set("Authorization", "Bearer "+c.apiKey)
+	req.Header.Set("x-api-key", c.apiKey)
+	req.Header.Set("anthropic-version", c.apiVersion)
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("openai: http request: %w", err)
+		return nil, fmt.Errorf("anthropic: http request: %w", err)
 	}
 
 	return resp, nil

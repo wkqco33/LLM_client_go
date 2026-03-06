@@ -23,10 +23,10 @@ func newTestClient(t *testing.T, handler http.HandlerFunc) (*openai.Client, *htt
 }
 
 func TestChatComplete_Success(t *testing.T) {
-	fixture := openai.ChatResponse{
+	fixture := llm.ChatResponse{
 		ID:    "chatcmpl-test",
 		Model: "gpt-4o",
-		Choices: []openai.Choice{
+		Choices: []llm.Choice{
 			{
 				Index:        0,
 				Message:      llm.Message{Role: llm.RoleAssistant, Content: "Paris"},
@@ -47,7 +47,7 @@ func TestChatComplete_Success(t *testing.T) {
 		json.NewEncoder(w).Encode(fixture)
 	})
 
-	resp, err := client.Chat.Complete(context.Background(), openai.ChatRequest{
+	resp, err := client.Complete(context.Background(), llm.ChatRequest{
 		Model:    "gpt-4o",
 		Messages: []llm.Message{openai.NewUserMessage("Capital of France?")},
 	})
@@ -75,7 +75,7 @@ func TestChatComplete_APIError(t *testing.T) {
 		})
 	})
 
-	_, err := client.Chat.Complete(context.Background(), openai.ChatRequest{
+	_, err := client.Complete(context.Background(), llm.ChatRequest{
 		Model:    "gpt-4o",
 		Messages: []llm.Message{openai.NewUserMessage("Hello")},
 	})
@@ -93,10 +93,10 @@ func TestChatComplete_APIError(t *testing.T) {
 }
 
 func TestChatComplete_WithTools(t *testing.T) {
-	fixture := openai.ChatResponse{
+	fixture := llm.ChatResponse{
 		ID:    "chatcmpl-tools",
 		Model: "gpt-4o",
-		Choices: []openai.Choice{
+		Choices: []llm.Choice{
 			{
 				Index: 0,
 				Message: llm.Message{
@@ -133,7 +133,7 @@ func TestChatComplete_WithTools(t *testing.T) {
 		"properties": map[string]any{"city": map[string]any{"type": "string"}},
 	})
 
-	resp, err := client.Chat.Complete(context.Background(), openai.ChatRequest{
+	resp, err := client.Complete(context.Background(), llm.ChatRequest{
 		Model:    "gpt-4o",
 		Messages: []llm.Message{openai.NewUserMessage("Weather in Tokyo?")},
 		Tools:    []llm.Tool{weatherTool},

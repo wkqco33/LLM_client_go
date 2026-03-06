@@ -43,14 +43,14 @@ func TestNew_WithBaseURL_Option(t *testing.T) {
 	called := false
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		called = true
-		json.NewEncoder(w).Encode(openai.ChatResponse{
-			Choices: []openai.Choice{{Message: llm.Message{Content: "ok"}, FinishReason: "stop"}},
+		json.NewEncoder(w).Encode(llm.ChatResponse{
+			Choices: []llm.Choice{{Message: llm.Message{Content: "ok"}, FinishReason: "stop"}},
 		})
 	}))
-	defer srv.Close()
+	t.Cleanup(srv.Close)
 
 	c := openai.New(openai.Config{APIKey: "key"}, openai.WithBaseURL(srv.URL))
-	c.Chat.Complete(context.Background(), openai.ChatRequest{
+	c.Complete(context.Background(), llm.ChatRequest{
 		Model:    "gpt-4o",
 		Messages: []llm.Message{openai.NewUserMessage("hi")},
 	})
@@ -63,14 +63,14 @@ func TestNew_WithTimeout_Option(t *testing.T) {
 	// 타임아웃 설정 후 실제 타임아웃이 걸리는지 검증
 	slowSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		time.Sleep(200 * time.Millisecond)
-		json.NewEncoder(w).Encode(openai.ChatResponse{})
+		json.NewEncoder(w).Encode(llm.ChatResponse{})
 	}))
-	defer slowSrv.Close()
+	t.Cleanup(slowSrv.Close)
 
 	c := openai.New(openai.Config{APIKey: "key", BaseURL: slowSrv.URL},
 		openai.WithTimeout(50*time.Millisecond),
 	)
-	_, err := c.Chat.Complete(context.Background(), openai.ChatRequest{
+	_, err := c.Complete(context.Background(), llm.ChatRequest{
 		Model:    "gpt-4o",
 		Messages: []llm.Message{openai.NewUserMessage("hi")},
 	})
@@ -87,11 +87,11 @@ func TestComplete_SendsAuthHeader(t *testing.T) {
 		if auth != "Bearer test-key" {
 			t.Errorf("expected 'Bearer test-key', got %q", auth)
 		}
-		json.NewEncoder(w).Encode(openai.ChatResponse{
-			Choices: []openai.Choice{{Message: llm.Message{Content: "ok"}, FinishReason: "stop"}},
+		json.NewEncoder(w).Encode(llm.ChatResponse{
+			Choices: []llm.Choice{{Message: llm.Message{Content: "ok"}, FinishReason: "stop"}},
 		})
 	})
-	client.Chat.Complete(context.Background(), openai.ChatRequest{
+	client.Complete(context.Background(), llm.ChatRequest{
 		Model:    "gpt-4o",
 		Messages: []llm.Message{openai.NewUserMessage("hi")},
 	})
@@ -103,11 +103,11 @@ func TestComplete_SendsContentTypeJSON(t *testing.T) {
 		if ct != "application/json" {
 			t.Errorf("expected Content-Type=application/json, got %q", ct)
 		}
-		json.NewEncoder(w).Encode(openai.ChatResponse{
-			Choices: []openai.Choice{{Message: llm.Message{Content: "ok"}, FinishReason: "stop"}},
+		json.NewEncoder(w).Encode(llm.ChatResponse{
+			Choices: []llm.Choice{{Message: llm.Message{Content: "ok"}, FinishReason: "stop"}},
 		})
 	})
-	client.Chat.Complete(context.Background(), openai.ChatRequest{
+	client.Complete(context.Background(), llm.ChatRequest{
 		Model:    "gpt-4o",
 		Messages: []llm.Message{openai.NewUserMessage("hi")},
 	})
@@ -121,11 +121,11 @@ func TestComplete_RequestBody_StreamForcedFalse(t *testing.T) {
 		if v, ok := body["stream"]; ok && v.(bool) {
 			t.Error("stream must be false or omitted for Complete()")
 		}
-		json.NewEncoder(w).Encode(openai.ChatResponse{
-			Choices: []openai.Choice{{Message: llm.Message{Content: "ok"}, FinishReason: "stop"}},
+		json.NewEncoder(w).Encode(llm.ChatResponse{
+			Choices: []llm.Choice{{Message: llm.Message{Content: "ok"}, FinishReason: "stop"}},
 		})
 	})
-	client.Chat.Complete(context.Background(), openai.ChatRequest{
+	client.Complete(context.Background(), llm.ChatRequest{
 		Model:    "gpt-4o",
 		Messages: []llm.Message{openai.NewUserMessage("hi")},
 		Stream:   true, // 강제로 true 설정해도 Complete 내부에서 false로 재설정됨
@@ -143,11 +143,11 @@ func TestComplete_RequestBody_ContainsModelAndMessages(t *testing.T) {
 		if !ok || len(msgs) == 0 {
 			t.Error("messages field missing or empty in request body")
 		}
-		json.NewEncoder(w).Encode(openai.ChatResponse{
-			Choices: []openai.Choice{{Message: llm.Message{Content: "ok"}, FinishReason: "stop"}},
+		json.NewEncoder(w).Encode(llm.ChatResponse{
+			Choices: []llm.Choice{{Message: llm.Message{Content: "ok"}, FinishReason: "stop"}},
 		})
 	})
-	client.Chat.Complete(context.Background(), openai.ChatRequest{
+	client.Complete(context.Background(), llm.ChatRequest{
 		Model:    "gpt-4o",
 		Messages: []llm.Message{openai.NewUserMessage("hello")},
 	})
@@ -167,11 +167,11 @@ func TestComplete_RequestBody_OptionalFields(t *testing.T) {
 		if !ok || stops[0].(string) != "END" {
 			t.Errorf("expected stop=['END'], got %v", body["stop"])
 		}
-		json.NewEncoder(w).Encode(openai.ChatResponse{
-			Choices: []openai.Choice{{Message: llm.Message{Content: "ok"}, FinishReason: "stop"}},
+		json.NewEncoder(w).Encode(llm.ChatResponse{
+			Choices: []llm.Choice{{Message: llm.Message{Content: "ok"}, FinishReason: "stop"}},
 		})
 	})
-	client.Chat.Complete(context.Background(), openai.ChatRequest{
+	client.Complete(context.Background(), llm.ChatRequest{
 		Model:       "gpt-4o",
 		Messages:    []llm.Message{openai.NewUserMessage("hi")},
 		MaxTokens:   100,
@@ -184,17 +184,17 @@ func TestComplete_RequestBody_OptionalFields(t *testing.T) {
 
 func TestComplete_ParsesResponseFields(t *testing.T) {
 	client, _ := testServer(t, func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(openai.ChatResponse{
+		json.NewEncoder(w).Encode(llm.ChatResponse{
 			ID:    "chatcmpl-xyz",
 			Model: "gpt-4o",
-			Choices: []openai.Choice{
+			Choices: []llm.Choice{
 				{Index: 0, Message: llm.Message{Role: llm.RoleAssistant, Content: "Paris"}, FinishReason: "stop"},
 			},
 			Usage: llm.Usage{PromptTokens: 8, CompletionTokens: 3, TotalTokens: 11},
 		})
 	})
 
-	resp, err := client.Chat.Complete(context.Background(), openai.ChatRequest{
+	resp, err := client.Complete(context.Background(), llm.ChatRequest{
 		Model:    "gpt-4o",
 		Messages: []llm.Message{openai.NewUserMessage("Capital of France?")},
 	})
@@ -217,15 +217,15 @@ func TestComplete_ParsesResponseFields(t *testing.T) {
 
 func TestComplete_MultipleChoices(t *testing.T) {
 	client, _ := testServer(t, func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(openai.ChatResponse{
-			Choices: []openai.Choice{
+		json.NewEncoder(w).Encode(llm.ChatResponse{
+			Choices: []llm.Choice{
 				{Index: 0, Message: llm.Message{Content: "A"}, FinishReason: "stop"},
 				{Index: 1, Message: llm.Message{Content: "B"}, FinishReason: "stop"},
 			},
 		})
 	})
 
-	resp, err := client.Chat.Complete(context.Background(), openai.ChatRequest{
+	resp, err := client.Complete(context.Background(), llm.ChatRequest{
 		Model: "gpt-4o", N: 2,
 		Messages: []llm.Message{openai.NewUserMessage("pick one")},
 	})
@@ -246,7 +246,7 @@ func TestComplete_Error_401_Unauthorized(t *testing.T) {
 			"message": "Incorrect API key", "code": "invalid_api_key", "type": "invalid_request_error",
 		}})
 	})
-	_, err := client.Chat.Complete(context.Background(), openai.ChatRequest{
+	_, err := client.Complete(context.Background(), llm.ChatRequest{
 		Model: "gpt-4o", Messages: []llm.Message{openai.NewUserMessage("hi")},
 	})
 	if !errors.Is(err, llm.ErrUnauthorized) {
@@ -265,7 +265,7 @@ func TestComplete_Error_429_RateLimited(t *testing.T) {
 			"message": "Rate limit exceeded", "type": "rate_limit_error",
 		}})
 	})
-	_, err := client.Chat.Complete(context.Background(), openai.ChatRequest{
+	_, err := client.Complete(context.Background(), llm.ChatRequest{
 		Model: "gpt-4o", Messages: []llm.Message{openai.NewUserMessage("hi")},
 	})
 	if !errors.Is(err, llm.ErrRateLimited) {
@@ -278,7 +278,7 @@ func TestComplete_Error_404_NotFound(t *testing.T) {
 		w.WriteHeader(http.StatusNotFound)
 		json.NewEncoder(w).Encode(map[string]any{"error": map[string]any{"message": "model not found"}})
 	})
-	_, err := client.Chat.Complete(context.Background(), openai.ChatRequest{
+	_, err := client.Complete(context.Background(), llm.ChatRequest{
 		Model: "gpt-999", Messages: []llm.Message{openai.NewUserMessage("hi")},
 	})
 	if !errors.Is(err, llm.ErrNotFound) {
@@ -291,7 +291,7 @@ func TestComplete_Error_400_BadRequest(t *testing.T) {
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]any{"error": map[string]any{"message": "invalid param"}})
 	})
-	_, err := client.Chat.Complete(context.Background(), openai.ChatRequest{
+	_, err := client.Complete(context.Background(), llm.ChatRequest{
 		Model: "gpt-4o", Messages: []llm.Message{openai.NewUserMessage("hi")},
 	})
 	if !errors.Is(err, llm.ErrBadRequest) {
@@ -304,7 +304,7 @@ func TestComplete_Error_500_ServerError(t *testing.T) {
 		w.WriteHeader(http.StatusInternalServerError)
 		json.NewEncoder(w).Encode(map[string]any{"error": map[string]any{"message": "internal error"}})
 	})
-	_, err := client.Chat.Complete(context.Background(), openai.ChatRequest{
+	_, err := client.Complete(context.Background(), llm.ChatRequest{
 		Model: "gpt-4o", Messages: []llm.Message{openai.NewUserMessage("hi")},
 	})
 	if !errors.Is(err, llm.ErrServerError) {
@@ -317,7 +317,7 @@ func TestComplete_Error_NonJSONBody_Fallback(t *testing.T) {
 		w.WriteHeader(http.StatusServiceUnavailable)
 		w.Write([]byte("Service Unavailable"))
 	})
-	_, err := client.Chat.Complete(context.Background(), openai.ChatRequest{
+	_, err := client.Complete(context.Background(), llm.ChatRequest{
 		Model: "gpt-4o", Messages: []llm.Message{openai.NewUserMessage("hi")},
 	})
 	if err == nil {
@@ -344,7 +344,7 @@ func TestComplete_ContextCancellation(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
 	defer cancel()
 
-	_, err := client.Chat.Complete(ctx, openai.ChatRequest{
+	_, err := client.Complete(ctx, llm.ChatRequest{
 		Model:    "gpt-4o",
 		Messages: []llm.Message{openai.NewUserMessage("hi")},
 	})
@@ -373,7 +373,7 @@ func TestStream_SendsStreamTrue(t *testing.T) {
 		w.Header().Set("Content-Type", "text/event-stream")
 		w.Write([]byte("data: [DONE]\n\n"))
 	})
-	stream, err := client.Chat.Stream(context.Background(), openai.ChatRequest{
+	stream, err := client.Stream(context.Background(), llm.ChatRequest{
 		Model: "gpt-4o", Messages: []llm.Message{openai.NewUserMessage("hi")},
 	})
 	if err != nil {
@@ -394,7 +394,7 @@ func TestStream_CollectsContent(t *testing.T) {
 		w.Write([]byte(makeSSE(chunks)))
 	})
 
-	stream, err := client.Chat.Stream(context.Background(), openai.ChatRequest{
+	stream, err := client.Stream(context.Background(), llm.ChatRequest{
 		Model: "gpt-4o", Messages: []llm.Message{openai.NewUserMessage("hi")},
 	})
 	if err != nil {
@@ -432,7 +432,7 @@ func TestStream_IgnoresNonDataLines(t *testing.T) {
 		w.Write([]byte(payload))
 	})
 
-	stream, _ := client.Chat.Stream(context.Background(), openai.ChatRequest{
+	stream, _ := client.Stream(context.Background(), llm.ChatRequest{
 		Model: "gpt-4o", Messages: []llm.Message{openai.NewUserMessage("hi")},
 	})
 	defer stream.Close()
@@ -458,13 +458,13 @@ func TestStream_IncludeUsage_FinalChunk(t *testing.T) {
 		w.Write([]byte(makeSSE(chunks)))
 	})
 
-	stream, _ := client.Chat.Stream(context.Background(), openai.ChatRequest{
+	stream, _ := client.Stream(context.Background(), llm.ChatRequest{
 		Model: "gpt-4o", Messages: []llm.Message{openai.NewUserMessage("hi")},
-		StreamOptions: &openai.StreamOptions{IncludeUsage: true},
+		StreamOptions: &llm.StreamOptions{IncludeUsage: true},
 	})
 	defer stream.Close()
 
-	var lastChunk *openai.ChatStreamChunk
+	var lastChunk *llm.ChatStreamChunk
 	for {
 		chunk, _ := stream.Next()
 		if chunk == nil {
@@ -485,7 +485,7 @@ func TestStream_Close_PreventsNextCall(t *testing.T) {
 		w.Header().Set("Content-Type", "text/event-stream")
 		w.Write([]byte("data: [DONE]\n\n"))
 	})
-	stream, _ := client.Chat.Stream(context.Background(), openai.ChatRequest{
+	stream, _ := client.Stream(context.Background(), llm.ChatRequest{
 		Model: "gpt-4o", Messages: []llm.Message{openai.NewUserMessage("hi")},
 	})
 	stream.Close()
@@ -501,7 +501,7 @@ func TestStream_DoubleClose_NoError(t *testing.T) {
 		w.Header().Set("Content-Type", "text/event-stream")
 		w.Write([]byte("data: [DONE]\n\n"))
 	})
-	stream, _ := client.Chat.Stream(context.Background(), openai.ChatRequest{
+	stream, _ := client.Stream(context.Background(), llm.ChatRequest{
 		Model: "gpt-4o", Messages: []llm.Message{openai.NewUserMessage("hi")},
 	})
 	stream.Close()
@@ -517,7 +517,7 @@ func TestStream_Error_ReturnsAPIError(t *testing.T) {
 			"message": "bad key", "code": "invalid_api_key",
 		}})
 	})
-	_, err := client.Chat.Stream(context.Background(), openai.ChatRequest{
+	_, err := client.Stream(context.Background(), llm.ChatRequest{
 		Model: "gpt-4o", Messages: []llm.Message{openai.NewUserMessage("hi")},
 	})
 	if !errors.Is(err, llm.ErrUnauthorized) {
@@ -593,10 +593,10 @@ func TestForceToolChoice(t *testing.T) {
 // ─── CollectToolCalls 검증 ────────────────────────────────────
 
 func TestCollectToolCalls_SingleTool(t *testing.T) {
-	deltas := []openai.ToolCallDelta{
-		{Index: 0, ID: "call_1", Type: "function", Function: openai.FunctionCallDelta{Name: "get_w"}},
-		{Index: 0, Function: openai.FunctionCallDelta{Name: "eather", Arguments: `{"ci`}},
-		{Index: 0, Function: openai.FunctionCallDelta{Arguments: `ty":"Seoul"}`}},
+	deltas := []llm.ToolCallDelta{
+		{Index: 0, ID: "call_1", Type: "function", Function: llm.FunctionCallDelta{Name: "get_w"}},
+		{Index: 0, Function: llm.FunctionCallDelta{Name: "eather", Arguments: `{"ci`}},
+		{Index: 0, Function: llm.FunctionCallDelta{Arguments: `ty":"Seoul"}`}},
 	}
 	calls := openai.CollectToolCalls(deltas)
 	if len(calls) != 1 {
@@ -611,9 +611,9 @@ func TestCollectToolCalls_SingleTool(t *testing.T) {
 }
 
 func TestCollectToolCalls_MultipleConcurrentTools(t *testing.T) {
-	deltas := []openai.ToolCallDelta{
-		{Index: 0, ID: "call_a", Function: openai.FunctionCallDelta{Name: "func_a", Arguments: `{"x":1}`}},
-		{Index: 1, ID: "call_b", Function: openai.FunctionCallDelta{Name: "func_b", Arguments: `{"y":2}`}},
+	deltas := []llm.ToolCallDelta{
+		{Index: 0, ID: "call_a", Function: llm.FunctionCallDelta{Name: "func_a", Arguments: `{"x":1}`}},
+		{Index: 1, ID: "call_b", Function: llm.FunctionCallDelta{Name: "func_b", Arguments: `{"y":2}`}},
 	}
 	calls := openai.CollectToolCalls(deltas)
 	if len(calls) != 2 {
@@ -639,8 +639,8 @@ func TestComplete_FunctionCalling_FullFlow(t *testing.T) {
 	client, _ := testServer(t, func(w http.ResponseWriter, r *http.Request) {
 		turnCount++
 		if turnCount == 1 {
-			json.NewEncoder(w).Encode(openai.ChatResponse{
-				Choices: []openai.Choice{{
+			json.NewEncoder(w).Encode(llm.ChatResponse{
+				Choices: []llm.Choice{{
 					Index: 0,
 					Message: llm.Message{
 						Role: llm.RoleAssistant,
@@ -666,8 +666,8 @@ func TestComplete_FunctionCalling_FullFlow(t *testing.T) {
 			if last["role"].(string) != "tool" {
 				t.Errorf("last message should have role=tool, got %q", last["role"])
 			}
-			json.NewEncoder(w).Encode(openai.ChatResponse{
-				Choices: []openai.Choice{{
+			json.NewEncoder(w).Encode(llm.ChatResponse{
+				Choices: []llm.Choice{{
 					Message:      llm.Message{Role: llm.RoleAssistant, Content: "Tokyo is 22°C."},
 					FinishReason: "stop",
 				}},
@@ -683,7 +683,7 @@ func TestComplete_FunctionCalling_FullFlow(t *testing.T) {
 	msgs := []llm.Message{openai.NewUserMessage("Weather in Tokyo?")}
 
 	// Turn 1
-	resp1, err := client.Chat.Complete(context.Background(), openai.ChatRequest{
+	resp1, err := client.Complete(context.Background(), llm.ChatRequest{
 		Model: "gpt-4o", Messages: msgs, Tools: []llm.Tool{weatherTool},
 	})
 	if err != nil {
@@ -699,7 +699,7 @@ func TestComplete_FunctionCalling_FullFlow(t *testing.T) {
 	}
 
 	// Turn 2
-	resp2, err := client.Chat.Complete(context.Background(), openai.ChatRequest{
+	resp2, err := client.Complete(context.Background(), llm.ChatRequest{
 		Model: "gpt-4o", Messages: msgs, Tools: []llm.Tool{weatherTool},
 	})
 	if err != nil {

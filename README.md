@@ -1,275 +1,148 @@
 # LLM Client Go
 
-Go로 구현된 OpenAI / Azure OpenAI 클라이언트 라이브러리입니다.  
-Chat Completions, SSE 스트리밍, Function Calling을 지원하며, Discord · Telegram · Slack 봇 어댑터를 내장하고 있습니다.
+Go로 구현된 통합 LLM 클라이언트 및 에이전트 프레임워크입니다.  
+OpenAI, Azure OpenAI, Anthropic Claude를 하나의 인터페이스로 다루며, **MCP(Model Context Protocol)** 연동과 자동 도구 실행 에이전트를 지원합니다.
 
-## 목차
-
-- [특징](#특징)
-- [패키지 구조](#패키지-구조)
-- [빠른 시작](#빠른-시작)
-  - [OpenAI Chat Completions](#openai-chat-completions)
-  - [SSE 스트리밍](#sse-스트리밍)
-  - [Function Calling](#function-calling)
-  - [Azure OpenAI](#azure-openai)
-- [봇 어댑터](#봇-어댑터)
-- [세션 관리](#세션-관리)
-- [에러 처리](#에러-처리)
-- [메신저 연결 가이드](#메신저-연결-가이드)
-
----
-
-## 특징
+## 핵심 특징
 
 | 기능 | 설명 |
-|---|---|
-| **멀티 프로바이더** | OpenAI, Azure OpenAI |
-| **Chat Completions** | 비스트리밍 / SSE 스트리밍 |
-| **Function Calling** | Tool 정의, 응답 파싱, 스트림 조합 헬퍼 |
-| **봇 어댑터** | Discord, Telegram, Slack (Socket Mode) |
-| **세션 관리** | 유저별 대화 히스토리, MaxHistory 자동 트리밍 |
-| **에러 처리** | HTTP 상태 코드별 구조화된 에러 타입 |
-| **외부 의존성** | LLM 코어는 표준 라이브러리만 사용 |
+| - | - |
+| **통합 인터페이스** | `llm.Client` 하나로 OpenAI, Azure, Anthropic Claude 모델 제어 |
+| **자동화 에이전트** | `agent.Runner`를 통한 도구(Function) 호출 루프 자동화 |
+| **MCP 연동** | HTTP 및 Stdio(JSON-RPC) 전송 방식을 통한 MCP 서버 도구 연결 |
+| **안정성 (Retry)** | 지수 백오프 및 Jitter가 적용된 자동 재시도 미들웨어 내장 |
+| **RAG 지원** | Embeddings API 통합 인터페이스 제공 |
+| **유틸리티** | 모델별 최적화된 토큰 계산기 및 컨텍스트 관리 |
+| **봇 어댑터** | Discord, Telegram, Slack 봇 즉시 연결 |
 
 ---
 
 ## 패키지 구조
 
-```
+```bash
 llm-client-go/
-├── types.go                  # 공통 타입 (Message, Role, Tool, ToolCall …)
-├── errors.go                 # APIError, 센티넬 에러
-│
-├── openai/
-│   ├── client.go             # OpenAI 클라이언트 (Functional Options)
-│   ├── chat.go               # Chat Completions
-│   ├── stream.go             # SSE 스트리밍
-│   └── tools.go              # Function Calling 헬퍼
-│
-├── azure/
-│   ├── client.go             # Azure OpenAI 클라이언트 (api-key 인증)
-│   ├── chat.go               # Chat Completions (DeploymentName 기반)
-│   ├── stream.go             # SSE 스트리밍
-│   └── tools.go              # Function Calling 헬퍼
-│
-├── bots/
-│   ├── bot.go                # Bot 인터페이스
-│   ├── session.go            # 유저별 세션 관리 (thread-safe)
-│   ├── handler.go            # Backend 인터페이스 + OpenAI/Azure 구현체
-│   ├── discord/bot.go        # Discord 봇 어댑터
-│   ├── telegram/bot.go       # Telegram 봇 어댑터
-│   └── slack/bot.go          # Slack 봇 어댑터 (Socket Mode)
-│
-└── examples/
-    ├── openai_chat/          # 기본 채팅
-    ├── openai_stream/        # 스트리밍
-    ├── openai_tools/         # Function Calling
-    ├── azure_chat/           # Azure 채팅
-    ├── azure_stream/         # Azure 스트리밍
-    ├── discord_bot/          # Discord 봇 실행
-    ├── telegram_bot/         # Telegram 봇 실행
-    └── slack_bot/            # Slack 봇 실행
+├── types.go                  # 공통 타입 및 llm.Client 인터페이스
+├── agent/                    # 에이전트 자동화 루프 (Runner)
+├── mcp/                      # MCP 클라이언트 및 에이전트 브릿지
+├── retry/                    # 자동 재시도 미들웨어 (RoundTripper)
+├── token/                    # 토큰 계산기 유틸리티
+├── openai/                   # OpenAI 프로바이더 구현
+├── azure/                    # Azure OpenAI 프로바이더 구현
+├── anthropic/                # Anthropic Claude 프로바이더 구현
+├── bots/                     # 메신저 봇 어댑터 (Discord, Telegram, Slack)
+└── examples/                 # 다양한 사용 사례 예제 코드
 ```
 
 ---
 
-## 빠른 시작
+## 1. 통합 클라이언트 사용법
 
-### OpenAI Chat Completions
-
-```go
-package main
-
-import (
-    "context"
-    "fmt"
-    "log"
-    "os"
-
-    llm "llm-client-go"
-    "llm-client-go/openai"
-)
-
-func main() {
-    client := openai.New(openai.Config{
-        APIKey: os.Getenv("OPENAI_API_KEY"),
-    })
-
-    resp, err := client.Chat.Complete(context.Background(), openai.ChatRequest{
-        Model: "gpt-4o",
-        Messages: []llm.Message{
-            openai.NewSystemMessage("You are a helpful assistant."),
-            openai.NewUserMessage("What is the capital of France?"),
-        },
-    })
-    if err != nil {
-        log.Fatal(err)
-    }
-
-    fmt.Println(resp.Choices[0].Message.Content)
-    fmt.Printf("Tokens used: %d\n", resp.Usage.TotalTokens)
-}
-```
-
-### SSE 스트리밍
+어떤 프로바이더든 `llm.Client` 인터페이스를 구현하므로 동일한 방식으로 요청을 보낼 수 있습니다.
 
 ```go
-stream, err := client.Chat.Stream(ctx, openai.ChatRequest{
-    Model:    "gpt-4o",
-    Messages: []llm.Message{openai.NewUserMessage("Tell me a story.")},
-})
-if err != nil {
-    log.Fatal(err)
-}
-defer stream.Close()
-
-for {
-    chunk, err := stream.Next()
-    if err != nil {
-        log.Fatal(err)
-    }
-    if chunk == nil { // [DONE]
-        break
-    }
-    for _, choice := range chunk.Choices {
-        fmt.Print(choice.Delta.Content)
-    }
-}
-```
-
-### Function Calling
-
-```go
-weatherTool := openai.NewTool("get_weather", "Get the current weather", map[string]any{
-    "type": "object",
-    "properties": map[string]any{
-        "city": map[string]any{"type": "string"},
-    },
-    "required": []string{"city"},
+// OpenAI, Azure, Anthropic 중 선택
+var client llm.Client = openai.New(openai.Config{
+    APIKey: os.Getenv("OPENAI_API_KEY"),
+    RetryPolicy: &retry.DefaultPolicy, // 자동 재시도 활성화
 })
 
-resp, err := client.Chat.Complete(ctx, openai.ChatRequest{
-    Model:    "gpt-4o",
-    Messages: []llm.Message{openai.NewUserMessage("Weather in Tokyo?")},
-    Tools:    []llm.Tool{weatherTool},
-})
-
-if resp.Choices[0].FinishReason == "tool_calls" {
-    for _, tc := range resp.Choices[0].Message.ToolCalls {
-        // tc.Function.Name, tc.Function.Arguments 를 활용해 도구 실행
-    }
-}
-```
-
-### Azure OpenAI
-
-```go
-client := azure.New(azure.Config{
-    Endpoint: "https://my-resource.openai.azure.com",
-    APIKey:   os.Getenv("AZURE_OPENAI_API_KEY"),
-    // APIVersion 기본값: "2024-02-01"
-})
-
-resp, err := client.Chat.Complete(ctx, azure.ChatRequest{
-    DeploymentName: "my-gpt4o-deployment",
+resp, err := client.Complete(ctx, llm.ChatRequest{
+    Model: "gpt-4o",
     Messages: []llm.Message{
-        azure.NewUserMessage("Hello!"),
+        {Role: llm.RoleUser, Content: "Hello Claude/GPT!"},
     },
 })
 ```
 
 ---
 
-## 봇 어댑터
+## 2. 에이전트 및 도구 자동화
 
-모든 봇 어댑터는 동일한 패턴을 따릅니다.
+`agent.Runner`를 사용하면 모델이 도구 호출을 요청했을 때 로컬 함수를 실행하고 결과를 다시 전달하는 루프를 자동으로 수행합니다.
 
 ```go
-// 1. LLM 백엔드 선택
-backend := bots.NewOpenAIBackend(os.Getenv("OPENAI_API_KEY"), "gpt-4o")
-// 또는 Azure:
-// backend := bots.NewAzureBackend(endpoint, apiKey, deploymentName)
-
-// 2. 세션 관리자 설정
-sessions := bots.NewSessionManager(
-    bots.WithSystemPrompt("You are a helpful assistant."),
-    bots.WithMaxHistory(20),
+runner := agent.NewRunner(client, "gpt-4o", 
+    agent.WithSystemPrompt("You are a helpful assistant."),
+    agent.WithMaxHistory(10), // 대화 이력 자동 관리
 )
 
-// 3. 봇 생성 + 실행
-bot, _ := discord.New(discord.Config{Token: "...", Backend: backend, Sessions: sessions})
+// 실행 가능한 도구 등록
+runner.RegisterTool(&weatherTool{}) 
 
-ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
-defer cancel()
-bot.Start(ctx)
+// 최종 응답이 나올 때까지 내부적으로 여러 번 상호작용
+msgs, resp, err := runner.Run(ctx, messages)
 ```
-
-각 플랫폼별 설정은 [메신저 연결 가이드](docs/messenger-setup.md)를 참고하세요.
-
-### 리셋 명령어
-
-| 플랫폼 | 명령어 |
-|---|---|
-| Discord | `!reset` |
-| Telegram | `/reset` |
-| Slack | `!reset` |
 
 ---
 
-## 세션 관리
+## 3. MCP (Model Context Protocol) 연동
+
+외부 MCP 서버(로컬 프로세스 또는 원격 서버)에서 제공하는 도구들을 에이전트에 동적으로 주입할 수 있습니다.
 
 ```go
-sm := bots.NewSessionManager(
-    bots.WithSystemPrompt("You are a pirate."), // 고정 시스템 프롬프트
-    bots.WithMaxHistory(20),                    // 유저당 최대 메시지 수
-)
+// 1. MCP 서버 연결 (Stdio 방식 예시)
+mcpProvider, _ := mcp.NewStdioClient("npx", "-y", "@modelcontextprotocol/server-filesystem", "/home/docs")
 
-sm.Append("user-id", llm.Message{Role: llm.RoleUser, Content: "Ahoy!"})
-history := sm.GetHistory("user-id") // 시스템 메시지 포함 전체 히스토리
-sm.Reset("user-id")                 // 대화 초기화
+// 2. MCP 도구들을 에이전트용 실행 도구로 변환하여 등록
+tools, _ := mcpProvider.ListTools(ctx)
+for _, t := range mcp.WrapTools(mcpProvider, tools) {
+    runner.RegisterTool(t)
+}
+
+// 3. 에이전트 실행 (이제 LLM이 파일 시스템 도구를 사용함)
+runner.Run(ctx, messages)
 ```
 
-- **MaxHistory** 초과 시 오래된 메시지부터 자동 제거
-- 시스템 메시지는 트리밍 대상에서 제외되어 항상 유지됨
-- `sync.RWMutex` 기반으로 동시 접근에 안전
+---
+
+## 4. 고급 기능
+
+### 자동 재시도 (Retry)
+
+네트워크 오류나 429(Rate Limit) 발생 시 서버의 `Retry-After` 헤더를 준수하며 지수 백오프를 수행합니다.
+
+```go
+policy := retry.Policy{
+    MaxRetries: 5,
+    MinWait:    2 * time.Second,
+}
+client := anthropic.New(anthropic.Config{
+    APIKey: "...",
+    RetryPolicy: &policy,
+})
+```
+
+### 토큰 계산기
+
+모델에 전송하기 전에 토큰 수를 미리 예측하여 비용과 컨텍스트를 제어할 수 있습니다.
+
+```go
+count := token.Estimate("Hello world")
+// 또는 메시지 리스트 전체 계산
+msgTokens := token.DefaultCounter.CountMessages(history)
+```
 
 ---
 
 ## 에러 처리
 
-```go
-_, err := client.Chat.Complete(ctx, req)
-if err != nil {
-    var apiErr *llm.APIError
-    if llm.IsAPIError(err, &apiErr) {
-        fmt.Printf("API error %d: %s\n", apiErr.StatusCode, apiErr.Message)
-    }
+라이브러리는 HTTP 상태 코드에 따른 구조화된 센티넬 에러를 제공합니다.
 
-    // 센티넬 에러로 분기
-    switch {
-    case errors.Is(err, llm.ErrUnauthorized):
-        // API 키 확인
-    case errors.Is(err, llm.ErrRateLimited):
-        // 재시도 로직
-    case errors.Is(err, llm.ErrServerError):
-        // 서버 오류 처리
-    }
-}
-```
-
-### 에러 종류
-
-| 에러 | HTTP 상태 | 설명 |
-|---|---|---|
-| `ErrUnauthorized` | 401 | API 키 오류 |
-| `ErrRateLimited` | 429 | 요청 한도 초과 |
-| `ErrNotFound` | 404 | 리소스 없음 |
-| `ErrBadRequest` | 400 | 잘못된 요청 |
-| `ErrServerError` | 5xx | 서버 오류 |
-| `ErrStreamClosed` | — | 닫힌 스트림 읽기 시도 |
+| 에러 | 설명 |
+| - | - |
+| `ErrUnauthorized` | API 키 오류 |
+| `ErrRateLimited` | 요청 한도 초과 (429) |
+| `ErrBadRequest` | 잘못된 파라미터 요청 (400) |
+| `ErrServerError` | 모델 프로바이더 서버 오류 (5xx) |
+| `ErrStreamClosed` | 닫힌 스트림에 대한 작업 시도 |
 
 ---
 
-## 메신저 연결 가이드
+## 예제 코드
 
-자세한 플랫폼별 설정 방법은 [`docs/messenger-setup.md`](docs/messenger-setup.md)를 참고하세요.
+상세한 사용법은 `examples/` 디렉토리를 참고하세요.
+
+- [에이전트 및 MCP 연동](examples/mcp_agent/main.go)
+- [Anthropic Claude 사용](examples/anthropic_chat/main.go)
+- [OpenAI 도구 사용](examples/openai_tools/main.go)
+- [메신저 봇 설정](docs/messenger-setup.md)

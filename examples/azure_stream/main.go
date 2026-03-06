@@ -16,15 +16,16 @@ func main() {
 		log.Fatalf("failed to load .env: %v", err)
 	}
 
-	client := azure.New(azure.Config{
+	var client llm.Client = azure.New(azure.Config{
 		Endpoint: os.Getenv("AZURE_OPENAI_ENDPOINT"),
 		APIKey:   os.Getenv("AZURE_OPENAI_API_KEY"),
 	})
 
-	stream, err := client.Chat.Stream(context.Background(), azure.ChatRequest{
-		DeploymentName: os.Getenv("AZURE_OPENAI_DEPLOYMENT"),
+	stream, err := client.Stream(context.Background(), llm.ChatRequest{
+		Model: os.Getenv("AZURE_OPENAI_DEPLOYMENT"),
 		Messages: []llm.Message{
-			azure.NewUserMessage("Tell me a short story about the ocean."),
+			azure.NewSystemMessage("You are a helpful assistant."),
+			azure.NewUserMessage("Write a short poem about Azure OpenAI."),
 		},
 	})
 	if err != nil {
@@ -41,8 +42,9 @@ func main() {
 		if chunk == nil {
 			break
 		}
-		for _, choice := range chunk.Choices {
-			fmt.Print(choice.Delta.Content)
+
+		if len(chunk.Choices) > 0 {
+			fmt.Print(chunk.Choices[0].Delta.Content)
 		}
 	}
 	fmt.Println()

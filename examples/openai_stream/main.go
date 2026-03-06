@@ -16,14 +16,15 @@ func main() {
 		log.Fatalf("failed to load .env: %v", err)
 	}
 
-	client := openai.New(openai.Config{
+	var client llm.Client = openai.New(openai.Config{
 		APIKey: os.Getenv("OPENAI_API_KEY"),
 	})
 
-	stream, err := client.Chat.Stream(context.Background(), openai.ChatRequest{
+	stream, err := client.Stream(context.Background(), llm.ChatRequest{
 		Model: "gpt-4o",
 		Messages: []llm.Message{
-			openai.NewUserMessage("Tell me a short story about a robot."),
+			openai.NewSystemMessage("You are a helpful assistant."),
+			openai.NewUserMessage("Write a short poem about Go programming."),
 		},
 	})
 	if err != nil {
@@ -38,11 +39,11 @@ func main() {
 			log.Fatal(err)
 		}
 		if chunk == nil {
-			// [DONE]
 			break
 		}
-		for _, choice := range chunk.Choices {
-			fmt.Print(choice.Delta.Content)
+
+		if len(chunk.Choices) > 0 {
+			fmt.Print(chunk.Choices[0].Delta.Content)
 		}
 	}
 	fmt.Println()

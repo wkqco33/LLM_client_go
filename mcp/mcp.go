@@ -1,0 +1,336 @@
+package mcp
+
+import (
+	"bufio"
+	"bytes"
+	"context"
+	"encoding/json"
+	"fmt"
+	"io"
+	"net/http"
+	"os/exec"
+	"sync"
+	"time"
+
+	llm "llm-client-go"
+	"llm-client-go/agent"
+)
+
+// ─── Common MCP Types ──────────────────────────────────────────
+
+type Tool struct {
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	InputSchema any    `json:"inputSchema"`
+}
+
+type CallToolRequest struct {
+	Name      string         `json:"name"`
+	Arguments map[string]any `json:"arguments"`
+}
+
+type CallToolResponse struct {
+	Content []struct {
+		Type string `json:"type"`
+		Text string `json:"text"`
+	} `json:"content"`
+	IsError bool `json:"isError,omitempty"`
+}
+
+// Provider is an interface for different MCP transport implementations.
+type Provider interface {
+	ListTools(ctx context.Context) ([]Tool, error)
+	CallTool(ctx context.Context, name string, arguments map[string]any) (*CallToolResponse, error)
+	IsAlive() bool
+}
+
+// ─── HTTP Client Implementation ───────────────────────────────
+
+type HttpClient struct {
+	baseURL    string
+	httpClient *http.Client
+}
+
+func NewHttpClient(baseURL string) *HttpClient {
+	return &HttpClient{
+		baseURL:    baseURL,
+		httpClient: &http.Client{Timeout: 10 * time.Second},
+	}
+}
+
+func (c *HttpClient) IsAlive() bool {
+	// Simple HTTP check could be added here
+	return true
+}
+
+func (c *HttpClient) ListTools(ctx context.Context) ([]Tool, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/tools", nil)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("mcp http: status %d", resp.StatusCode)
+	}
+
+	var result struct {
+		Tools []Tool `json:"tools"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, err
+	}
+	return result.Tools, nil
+}
+
+func (c *HttpClient) CallTool(ctx context.Context, name string, arguments map[string]any) (*CallToolResponse, error) {
+	payload, _ := json.Marshal(CallToolRequest{Name: name, Arguments: arguments})
+	req, _ := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+"/tools/call", bytes.NewReader(payload))
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	var result CallToolResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, err
+	}
+	return &result, nil
+}
+
+// ─── Stdio Client Implementation (JSON-RPC) ────────────────────
+
+type StdioClient struct {
+	cmd    *exec.Cmd
+	stdin  io.WriteCloser
+	stdout *bufio.Scanner
+
+	mu       sync.Mutex
+	id       int
+	pending  map[int]chan jsonRPCResponse
+	isClosed bool
+}
+
+type jsonRPCRequest struct {
+	JSONRPC string `json:"jsonrpc"`
+	ID      int    `json:"id"`
+	Method  string `json:"method"`
+	Params  any    `json:"params"`
+}
+
+type jsonRPCResponse struct {
+	JSONRPC string          `json:"jsonrpc"`
+	ID      int             `json:"id"`
+	Result  json.RawMessage `json:"result,omitempty"`
+	Error   *jsonRPCError   `json:"error,omitempty"`
+}
+
+type jsonRPCError struct {
+	Code    int    `json:"code"`
+	Message string `json:"message"`
+}
+
+func (e *jsonRPCError) Error() string {
+	return fmt.Sprintf("MCP Error (%d): %s", e.Code, e.Message)
+}
+
+func NewStdioClient(command string, args ...string) (*StdioClient, error) {
+	cmd := exec.Command(command, args...)
+	stdin, err := cmd.StdinPipe()
+	if err != nil {
+		return nil, err
+	}
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		return nil, err
+	}
+
+	if err := cmd.Start(); err != nil {
+		return nil, err
+	}
+
+	c := &StdioClient{
+		cmd:     cmd,
+		stdin:   stdin,
+		stdout:  bufio.NewScanner(stdout),
+		pending: make(map[int]chan jsonRPCResponse),
+	}
+
+	go c.readLoop()
+	return c, nil
+}
+
+func (c *StdioClient) IsAlive() bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return !c.isClosed && c.cmd.Process != nil && c.cmd.ProcessState == nil
+}
+
+func (c *StdioClient) readLoop() {
+	for c.stdout.Scan() {
+		var resp jsonRPCResponse
+		if err := json.Unmarshal(c.stdout.Bytes(), &resp); err != nil {
+			continue
+		}
+
+		c.mu.Lock()
+		ch, ok := c.pending[resp.ID]
+		if ok {
+			delete(c.pending, resp.ID)
+			ch <- resp
+		}
+		c.mu.Unlock()
+	}
+
+	c.mu.Lock()
+	c.isClosed = true
+	// Close all pending requests with error
+	for id, ch := range c.pending {
+		delete(c.pending, id)
+		ch <- jsonRPCResponse{Error: &jsonRPCError{Code: -1, Message: "stdio pipe closed"}}
+	}
+	c.mu.Unlock()
+}
+
+func (c *StdioClient) call(ctx context.Context, method string, params any) (json.RawMessage, error) {
+	if !c.IsAlive() {
+		return nil, fmt.Errorf("mcp stdio: server process is not running")
+	}
+
+	c.mu.Lock()
+	c.id++
+	id := c.id
+	ch := make(chan jsonRPCResponse, 1)
+	c.pending[id] = ch
+	c.mu.Unlock()
+
+	req := jsonRPCRequest{
+		JSONRPC: "2.0",
+		ID:      id,
+		Method:  method,
+		Params:  params,
+	}
+
+	data, _ := json.Marshal(req)
+	fmt.Fprintln(c.stdin, string(data))
+
+	select {
+	case resp := <-ch:
+		if resp.Error != nil {
+			return nil, resp.Error
+		}
+		return resp.Result, nil
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case <-time.After(30 * time.Second):
+		return nil, fmt.Errorf("mcp stdio: request timeout")
+	}
+}
+
+func (c *StdioClient) ListTools(ctx context.Context) ([]Tool, error) {
+	raw, err := c.call(ctx, "tools/list", map[string]any{})
+	if err != nil {
+		return nil, err
+	}
+	var result struct {
+		Tools []Tool `json:"tools"`
+	}
+	if err := json.Unmarshal(raw, &result); err != nil {
+		return nil, err
+	}
+	return result.Tools, nil
+}
+
+func (c *StdioClient) CallTool(ctx context.Context, name string, arguments map[string]any) (*CallToolResponse, error) {
+	params := map[string]any{
+		"name":      name,
+		"arguments": arguments,
+	}
+	raw, err := c.call(ctx, "tools/call", params)
+	if err != nil {
+		return nil, err
+	}
+	var result CallToolResponse
+	if err := json.Unmarshal(raw, &result); err != nil {
+		return nil, err
+	}
+	return &result, nil
+}
+
+func (c *StdioClient) Close() error {
+	c.mu.Lock()
+	if c.isClosed {
+		c.mu.Unlock()
+		return nil
+	}
+	c.isClosed = true
+	c.mu.Unlock()
+
+	c.stdin.Close()
+	return c.cmd.Process.Kill()
+}
+
+// ─── Bridge ───────────────────────────────────────────────────
+
+type toolBridge struct {
+	provider Provider
+	tool     Tool
+}
+
+func (b *toolBridge) Definition() llm.Tool {
+	return llm.Tool{
+		Type: "function",
+		Function: llm.FunctionDef{
+			Name:        b.tool.Name,
+			Description: b.tool.Description,
+			Parameters:  b.tool.InputSchema,
+		},
+	}
+}
+
+func (b *toolBridge) Execute(ctx context.Context, arguments string) (string, error) {
+	if !b.provider.IsAlive() {
+		return "Error: MCP server is not reachable", nil
+	}
+
+	var args map[string]any
+	if err := json.Unmarshal([]byte(arguments), &args); err != nil {
+		return fmt.Sprintf("Error parsing arguments: %v", err), nil
+	}
+
+	resp, err := b.provider.CallTool(ctx, b.tool.Name, args)
+	if err != nil {
+		// Return the error so the LLM can see it
+		return fmt.Sprintf("Tool execution failed: %v", err), nil
+	}
+
+	var output string
+	for _, part := range resp.Content {
+		output += part.Text
+	}
+
+	if resp.IsError {
+		return fmt.Sprintf("Tool returned an error: %s", output), nil
+	}
+
+	if output == "" {
+		return "Tool executed successfully but returned no output", nil
+	}
+
+	return output, nil
+}
+
+func WrapTools(p Provider, tools []Tool) []agent.ExecutableTool {
+	result := make([]agent.ExecutableTool, 0, len(tools))
+	for _, t := range tools {
+		result = append(result, &toolBridge{provider: p, tool: t})
+	}
+	return result
+}

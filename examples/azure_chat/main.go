@@ -16,16 +16,18 @@ func main() {
 		log.Fatalf("failed to load .env: %v", err)
 	}
 
-	client := azure.New(azure.Config{
-		Endpoint: os.Getenv("AZURE_OPENAI_ENDPOINT"), // e.g. https://my-resource.openai.azure.com
+	// azure.Client implements llm.Client interface
+	var client llm.Client = azure.New(azure.Config{
+		Endpoint: os.Getenv("AZURE_OPENAI_ENDPOINT"),
 		APIKey:   os.Getenv("AZURE_OPENAI_API_KEY"),
 	})
 
-	resp, err := client.Chat.Complete(context.Background(), azure.ChatRequest{
-		DeploymentName: os.Getenv("AZURE_OPENAI_DEPLOYMENT"), // e.g. "gpt-4o"
+	// DeploymentName is mapped to Model in llm.ChatRequest
+	resp, err := client.Complete(context.Background(), llm.ChatRequest{
+		Model: os.Getenv("AZURE_OPENAI_DEPLOYMENT"),
 		Messages: []llm.Message{
 			azure.NewSystemMessage("You are a helpful assistant."),
-			azure.NewUserMessage("What is the capital of Japan?"),
+			azure.NewUserMessage("What is the capital of France?"),
 		},
 	})
 	if err != nil {

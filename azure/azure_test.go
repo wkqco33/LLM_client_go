@@ -44,16 +44,16 @@ func TestNew_DefaultAPIVersion(t *testing.T) {
 	var gotURL string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotURL = r.URL.RawQuery
-		json.NewEncoder(w).Encode(azure.ChatResponse{
-			Choices: []azure.Choice{{Message: llm.Message{Content: "ok"}, FinishReason: "stop"}},
+		json.NewEncoder(w).Encode(llm.ChatResponse{
+			Choices: []llm.Choice{{Message: llm.Message{Content: "ok"}, FinishReason: "stop"}},
 		})
 	}))
 	defer srv.Close()
 
 	client := azure.New(azure.Config{Endpoint: srv.URL, APIKey: "key"})
-	client.Chat.Complete(context.Background(), azure.ChatRequest{
-		DeploymentName: "gpt4",
-		Messages:       []llm.Message{azure.NewUserMessage("hi")},
+	client.Complete(context.Background(), llm.ChatRequest{
+		Model:    "gpt4",
+		Messages: []llm.Message{azure.NewUserMessage("hi")},
 	})
 
 	if !strings.Contains(gotURL, "api-version=2024-02-01") {
@@ -65,8 +65,8 @@ func TestNew_WithAPIVersion_Option(t *testing.T) {
 	var gotURL string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotURL = r.URL.RawQuery
-		json.NewEncoder(w).Encode(azure.ChatResponse{
-			Choices: []azure.Choice{{Message: llm.Message{Content: "ok"}, FinishReason: "stop"}},
+		json.NewEncoder(w).Encode(llm.ChatResponse{
+			Choices: []llm.Choice{{Message: llm.Message{Content: "ok"}, FinishReason: "stop"}},
 		})
 	}))
 	defer srv.Close()
@@ -74,9 +74,9 @@ func TestNew_WithAPIVersion_Option(t *testing.T) {
 	client := azure.New(azure.Config{Endpoint: srv.URL, APIKey: "key"},
 		azure.WithAPIVersion("2025-01-01"),
 	)
-	client.Chat.Complete(context.Background(), azure.ChatRequest{
-		DeploymentName: "gpt4",
-		Messages:       []llm.Message{azure.NewUserMessage("hi")},
+	client.Complete(context.Background(), llm.ChatRequest{
+		Model:    "gpt4",
+		Messages: []llm.Message{azure.NewUserMessage("hi")},
 	})
 
 	if !strings.Contains(gotURL, "api-version=2025-01-01") {
@@ -89,16 +89,16 @@ func TestNew_EndpointTrailingSlash_Trimmed(t *testing.T) {
 	var gotPath string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotPath = r.URL.Path
-		json.NewEncoder(w).Encode(azure.ChatResponse{
-			Choices: []azure.Choice{{Message: llm.Message{Content: "ok"}, FinishReason: "stop"}},
+		json.NewEncoder(w).Encode(llm.ChatResponse{
+			Choices: []llm.Choice{{Message: llm.Message{Content: "ok"}, FinishReason: "stop"}},
 		})
 	}))
 	defer srv.Close()
 
 	client := azure.New(azure.Config{Endpoint: srv.URL + "/", APIKey: "key"})
-	client.Chat.Complete(context.Background(), azure.ChatRequest{
-		DeploymentName: "my-deploy",
-		Messages:       []llm.Message{azure.NewUserMessage("hi")},
+	client.Complete(context.Background(), llm.ChatRequest{
+		Model:    "my-deploy",
+		Messages: []llm.Message{azure.NewUserMessage("hi")},
 	})
 
 	if strings.Contains(gotPath, "//") {
@@ -109,16 +109,16 @@ func TestNew_EndpointTrailingSlash_Trimmed(t *testing.T) {
 func TestNew_WithTimeout(t *testing.T) {
 	slowSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		time.Sleep(200 * time.Millisecond)
-		json.NewEncoder(w).Encode(azure.ChatResponse{})
+		json.NewEncoder(w).Encode(llm.ChatResponse{})
 	}))
 	defer slowSrv.Close()
 
 	client := azure.New(azure.Config{Endpoint: slowSrv.URL, APIKey: "key"},
 		azure.WithTimeout(50*time.Millisecond),
 	)
-	_, err := client.Chat.Complete(context.Background(), azure.ChatRequest{
-		DeploymentName: "gpt4",
-		Messages:       []llm.Message{azure.NewUserMessage("hi")},
+	_, err := client.Complete(context.Background(), llm.ChatRequest{
+		Model:    "gpt4",
+		Messages: []llm.Message{azure.NewUserMessage("hi")},
 	})
 	if err == nil {
 		t.Error("expected timeout error, got nil")
@@ -137,13 +137,13 @@ func TestComplete_SendsAPIKeyHeader(t *testing.T) {
 		if r.Header.Get("Authorization") != "" {
 			t.Error("Azure should NOT send Authorization header")
 		}
-		json.NewEncoder(w).Encode(azure.ChatResponse{
-			Choices: []azure.Choice{{Message: llm.Message{Content: "ok"}, FinishReason: "stop"}},
+		json.NewEncoder(w).Encode(llm.ChatResponse{
+			Choices: []llm.Choice{{Message: llm.Message{Content: "ok"}, FinishReason: "stop"}},
 		})
 	})
-	client.Chat.Complete(context.Background(), azure.ChatRequest{
-		DeploymentName: "gpt4",
-		Messages:       []llm.Message{azure.NewUserMessage("hi")},
+	client.Complete(context.Background(), llm.ChatRequest{
+		Model:    "gpt4",
+		Messages: []llm.Message{azure.NewUserMessage("hi")},
 	})
 }
 
@@ -152,13 +152,13 @@ func TestComplete_SendsContentTypeJSON(t *testing.T) {
 		if r.Header.Get("Content-Type") != "application/json" {
 			t.Errorf("expected Content-Type=application/json, got %q", r.Header.Get("Content-Type"))
 		}
-		json.NewEncoder(w).Encode(azure.ChatResponse{
-			Choices: []azure.Choice{{Message: llm.Message{Content: "ok"}, FinishReason: "stop"}},
+		json.NewEncoder(w).Encode(llm.ChatResponse{
+			Choices: []llm.Choice{{Message: llm.Message{Content: "ok"}, FinishReason: "stop"}},
 		})
 	})
-	client.Chat.Complete(context.Background(), azure.ChatRequest{
-		DeploymentName: "gpt4",
-		Messages:       []llm.Message{azure.NewUserMessage("hi")},
+	client.Complete(context.Background(), llm.ChatRequest{
+		Model:    "gpt4",
+		Messages: []llm.Message{azure.NewUserMessage("hi")},
 	})
 }
 
@@ -168,16 +168,16 @@ func TestComplete_DeploymentURL_Format(t *testing.T) {
 	var gotPath string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotPath = r.URL.Path
-		json.NewEncoder(w).Encode(azure.ChatResponse{
-			Choices: []azure.Choice{{Message: llm.Message{Content: "ok"}, FinishReason: "stop"}},
+		json.NewEncoder(w).Encode(llm.ChatResponse{
+			Choices: []llm.Choice{{Message: llm.Message{Content: "ok"}, FinishReason: "stop"}},
 		})
 	}))
 	defer srv.Close()
 
 	client := azure.New(azure.Config{Endpoint: srv.URL, APIKey: "key"})
-	client.Chat.Complete(context.Background(), azure.ChatRequest{
-		DeploymentName: "my-gpt4",
-		Messages:       []llm.Message{azure.NewUserMessage("hi")},
+	client.Complete(context.Background(), llm.ChatRequest{
+		Model:    "my-gpt4",
+		Messages: []llm.Message{azure.NewUserMessage("hi")},
 	})
 
 	expected := "/openai/deployments/my-gpt4/chat/completions"
@@ -186,32 +186,14 @@ func TestComplete_DeploymentURL_Format(t *testing.T) {
 	}
 }
 
-func TestComplete_DeploymentName_NotInBody(t *testing.T) {
-	// DeploymentName은 json:"-" 태그이므로 요청 바디에 포함되지 않아야 함
-	client, _ := testServer(t, func(w http.ResponseWriter, r *http.Request) {
-		var body map[string]any
-		json.NewDecoder(r.Body).Decode(&body)
-		if _, ok := body["deployment_name"]; ok {
-			t.Error("DeploymentName should NOT appear in request body (json:\"-\")")
-		}
-		json.NewEncoder(w).Encode(azure.ChatResponse{
-			Choices: []azure.Choice{{Message: llm.Message{Content: "ok"}, FinishReason: "stop"}},
-		})
-	})
-	client.Chat.Complete(context.Background(), azure.ChatRequest{
-		DeploymentName: "gpt4",
-		Messages:       []llm.Message{azure.NewUserMessage("hi")},
-	})
-}
-
 // ─── Complete 응답 파싱 ────────────────────────────────────────
 
 func TestComplete_ParsesResponseFields(t *testing.T) {
 	client, _ := testServer(t, func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(azure.ChatResponse{
+		json.NewEncoder(w).Encode(llm.ChatResponse{
 			ID:    "azure-cmpl-001",
 			Model: "gpt-4",
-			Choices: []azure.Choice{{
+			Choices: []llm.Choice{{
 				Index:        0,
 				Message:      llm.Message{Role: llm.RoleAssistant, Content: "Azure reply"},
 				FinishReason: "stop",
@@ -220,9 +202,9 @@ func TestComplete_ParsesResponseFields(t *testing.T) {
 		})
 	})
 
-	resp, err := client.Chat.Complete(context.Background(), azure.ChatRequest{
-		DeploymentName: "gpt4",
-		Messages:       []llm.Message{azure.NewUserMessage("hi")},
+	resp, err := client.Complete(context.Background(), llm.ChatRequest{
+		Model:    "gpt4",
+		Messages: []llm.Message{azure.NewUserMessage("hi")},
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -242,14 +224,14 @@ func TestComplete_StreamForcedFalse(t *testing.T) {
 		if v, ok := body["stream"]; ok && v.(bool) {
 			t.Error("stream must be false or omitted for Complete()")
 		}
-		json.NewEncoder(w).Encode(azure.ChatResponse{
-			Choices: []azure.Choice{{Message: llm.Message{Content: "ok"}, FinishReason: "stop"}},
+		json.NewEncoder(w).Encode(llm.ChatResponse{
+			Choices: []llm.Choice{{Message: llm.Message{Content: "ok"}, FinishReason: "stop"}},
 		})
 	})
-	client.Chat.Complete(context.Background(), azure.ChatRequest{
-		DeploymentName: "gpt4",
-		Messages:       []llm.Message{azure.NewUserMessage("hi")},
-		Stream:         true, // 강제 설정해도 Complete 내부에서 false로 재설정됨
+	client.Complete(context.Background(), llm.ChatRequest{
+		Model:    "gpt4",
+		Messages: []llm.Message{azure.NewUserMessage("hi")},
+		Stream:   true, // 강제 설정해도 Complete 내부에서 false로 재설정됨
 	})
 }
 
@@ -262,8 +244,8 @@ func TestComplete_Error_401_Unauthorized(t *testing.T) {
 			"message": "Access denied", "code": "401",
 		}})
 	})
-	_, err := client.Chat.Complete(context.Background(), azure.ChatRequest{
-		DeploymentName: "gpt4", Messages: []llm.Message{azure.NewUserMessage("hi")},
+	_, err := client.Complete(context.Background(), llm.ChatRequest{
+		Model: "gpt4", Messages: []llm.Message{azure.NewUserMessage("hi")},
 	})
 	if !errors.Is(err, llm.ErrUnauthorized) {
 		t.Errorf("expected ErrUnauthorized, got %v", err)
@@ -275,8 +257,8 @@ func TestComplete_Error_429_RateLimited(t *testing.T) {
 		w.WriteHeader(http.StatusTooManyRequests)
 		json.NewEncoder(w).Encode(map[string]any{"error": map[string]any{"message": "Rate limit"}})
 	})
-	_, err := client.Chat.Complete(context.Background(), azure.ChatRequest{
-		DeploymentName: "gpt4", Messages: []llm.Message{azure.NewUserMessage("hi")},
+	_, err := client.Complete(context.Background(), llm.ChatRequest{
+		Model: "gpt4", Messages: []llm.Message{azure.NewUserMessage("hi")},
 	})
 	if !errors.Is(err, llm.ErrRateLimited) {
 		t.Errorf("expected ErrRateLimited, got %v", err)
@@ -288,8 +270,8 @@ func TestComplete_Error_500_ServerError(t *testing.T) {
 		w.WriteHeader(http.StatusInternalServerError)
 		json.NewEncoder(w).Encode(map[string]any{"error": map[string]any{"message": "internal"}})
 	})
-	_, err := client.Chat.Complete(context.Background(), azure.ChatRequest{
-		DeploymentName: "gpt4", Messages: []llm.Message{azure.NewUserMessage("hi")},
+	_, err := client.Complete(context.Background(), llm.ChatRequest{
+		Model: "gpt4", Messages: []llm.Message{azure.NewUserMessage("hi")},
 	})
 	if !errors.Is(err, llm.ErrServerError) {
 		t.Errorf("expected ErrServerError, got %v", err)
@@ -301,8 +283,8 @@ func TestComplete_Error_NonJSONFallback(t *testing.T) {
 		w.WriteHeader(http.StatusBadGateway)
 		fmt.Fprint(w, "Bad Gateway")
 	})
-	_, err := client.Chat.Complete(context.Background(), azure.ChatRequest{
-		DeploymentName: "gpt4", Messages: []llm.Message{azure.NewUserMessage("hi")},
+	_, err := client.Complete(context.Background(), llm.ChatRequest{
+		Model: "gpt4", Messages: []llm.Message{azure.NewUserMessage("hi")},
 	})
 	var apiErr *llm.APIError
 	if !llm.IsAPIError(err, &apiErr) {
@@ -325,8 +307,8 @@ func TestStream_SendsStreamTrue(t *testing.T) {
 		w.Header().Set("Content-Type", "text/event-stream")
 		fmt.Fprint(w, "data: [DONE]\n\n")
 	})
-	stream, err := client.Chat.Stream(context.Background(), azure.ChatRequest{
-		DeploymentName: "gpt4", Messages: []llm.Message{azure.NewUserMessage("hi")},
+	stream, err := client.Stream(context.Background(), llm.ChatRequest{
+		Model: "gpt4", Messages: []llm.Message{azure.NewUserMessage("hi")},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -346,8 +328,8 @@ func TestStream_CollectsContent(t *testing.T) {
 		fmt.Fprint(w, makeSSE(chunks))
 	})
 
-	stream, err := client.Chat.Stream(context.Background(), azure.ChatRequest{
-		DeploymentName: "gpt4", Messages: []llm.Message{azure.NewUserMessage("hi")},
+	stream, err := client.Stream(context.Background(), llm.ChatRequest{
+		Model: "gpt4", Messages: []llm.Message{azure.NewUserMessage("hi")},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -377,8 +359,8 @@ func TestStream_Close_PreventsNextCall(t *testing.T) {
 		w.Header().Set("Content-Type", "text/event-stream")
 		fmt.Fprint(w, "data: [DONE]\n\n")
 	})
-	stream, _ := client.Chat.Stream(context.Background(), azure.ChatRequest{
-		DeploymentName: "gpt4", Messages: []llm.Message{azure.NewUserMessage("hi")},
+	stream, _ := client.Stream(context.Background(), llm.ChatRequest{
+		Model: "gpt4", Messages: []llm.Message{azure.NewUserMessage("hi")},
 	})
 	stream.Close()
 
@@ -393,8 +375,8 @@ func TestStream_Error_ReturnsAPIError(t *testing.T) {
 		w.WriteHeader(http.StatusUnauthorized)
 		json.NewEncoder(w).Encode(map[string]any{"error": map[string]any{"message": "bad key"}})
 	})
-	_, err := client.Chat.Stream(context.Background(), azure.ChatRequest{
-		DeploymentName: "gpt4", Messages: []llm.Message{azure.NewUserMessage("hi")},
+	_, err := client.Stream(context.Background(), llm.ChatRequest{
+		Model: "gpt4", Messages: []llm.Message{azure.NewUserMessage("hi")},
 	})
 	if !errors.Is(err, llm.ErrUnauthorized) {
 		t.Errorf("expected ErrUnauthorized from Stream, got %v", err)
@@ -457,9 +439,9 @@ func TestComplete_ContextCancellation(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
 	defer cancel()
 
-	_, err := client.Chat.Complete(ctx, azure.ChatRequest{
-		DeploymentName: "gpt4",
-		Messages:       []llm.Message{azure.NewUserMessage("hi")},
+	_, err := client.Complete(ctx, llm.ChatRequest{
+		Model:    "gpt4",
+		Messages: []llm.Message{azure.NewUserMessage("hi")},
 	})
 	if err == nil {
 		t.Error("expected context cancellation error, got nil")

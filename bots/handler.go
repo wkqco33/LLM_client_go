@@ -15,60 +15,39 @@ type Backend interface {
 	Complete(ctx context.Context, messages []llm.Message) (string, error)
 }
 
-// OpenAIBackend wraps the OpenAI client as a Bot Backend.
-type OpenAIBackend struct {
-	Client *openai.Client
+// CommonBackend wraps any llm.Client as a Bot Backend.
+type CommonBackend struct {
+	Client llm.Client
 	Model  string
 }
 
-// NewOpenAIBackend creates an OpenAI-backed Backend.
-func NewOpenAIBackend(apiKey, model string, opts ...openai.Option) *OpenAIBackend {
-	return &OpenAIBackend{
+// NewOpenAIBackend creates an OpenAI-backed Backend using the unified interface.
+func NewOpenAIBackend(apiKey, model string, opts ...openai.Option) *CommonBackend {
+	return &CommonBackend{
 		Client: openai.New(openai.Config{APIKey: apiKey}, opts...),
 		Model:  model,
 	}
 }
 
-// Complete implements Backend for OpenAI.
-func (b *OpenAIBackend) Complete(ctx context.Context, messages []llm.Message) (string, error) {
-	resp, err := b.Client.Chat.Complete(ctx, openai.ChatRequest{
+// NewAzureBackend creates an Azure OpenAI-backed Backend using the unified interface.
+func NewAzureBackend(endpoint, apiKey, deploymentName string, opts ...azure.Option) *CommonBackend {
+	return &CommonBackend{
+		Client: azure.New(azure.Config{Endpoint: endpoint, APIKey: apiKey}, opts...),
+		Model:  deploymentName,
+	}
+}
+
+// Complete implements Backend using the unified llm.Client interface.
+func (b *CommonBackend) Complete(ctx context.Context, messages []llm.Message) (string, error) {
+	resp, err := b.Client.Complete(ctx, llm.ChatRequest{
 		Model:    b.Model,
 		Messages: messages,
 	})
 	if err != nil {
-		return "", fmt.Errorf("openai backend: %w", err)
+		return "", fmt.Errorf("backend: %w", err)
 	}
 	if len(resp.Choices) == 0 {
-		return "", fmt.Errorf("openai backend: no choices in response")
-	}
-	return resp.Choices[0].Message.Content, nil
-}
-
-// AzureBackend wraps the Azure OpenAI client as a Bot Backend.
-type AzureBackend struct {
-	Client         *azure.Client
-	DeploymentName string
-}
-
-// NewAzureBackend creates an Azure OpenAI-backed Backend.
-func NewAzureBackend(endpoint, apiKey, deploymentName string, opts ...azure.Option) *AzureBackend {
-	return &AzureBackend{
-		Client:         azure.New(azure.Config{Endpoint: endpoint, APIKey: apiKey}, opts...),
-		DeploymentName: deploymentName,
-	}
-}
-
-// Complete implements Backend for Azure OpenAI.
-func (b *AzureBackend) Complete(ctx context.Context, messages []llm.Message) (string, error) {
-	resp, err := b.Client.Chat.Complete(ctx, azure.ChatRequest{
-		DeploymentName: b.DeploymentName,
-		Messages:       messages,
-	})
-	if err != nil {
-		return "", fmt.Errorf("azure backend: %w", err)
-	}
-	if len(resp.Choices) == 0 {
-		return "", fmt.Errorf("azure backend: no choices in response")
+		return "", fmt.Errorf("backend: no choices in response")
 	}
 	return resp.Choices[0].Message.Content, nil
 }

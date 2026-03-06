@@ -27,7 +27,7 @@ func TestChatStream_Success(t *testing.T) {
 	defer srv.Close()
 
 	client := openai.New(openai.Config{APIKey: "test-key", BaseURL: srv.URL})
-	stream, err := client.Chat.Stream(context.Background(), openai.ChatRequest{
+	stream, err := client.Stream(context.Background(), llm.ChatRequest{
 		Model:    "gpt-4o",
 		Messages: []llm.Message{openai.NewUserMessage("Hi")},
 	})
@@ -63,7 +63,7 @@ func TestChatStream_ClosedError(t *testing.T) {
 	defer srv.Close()
 
 	client := openai.New(openai.Config{APIKey: "test-key", BaseURL: srv.URL})
-	stream, err := client.Chat.Stream(context.Background(), openai.ChatRequest{
+	stream, err := client.Stream(context.Background(), llm.ChatRequest{
 		Model:    "gpt-4o",
 		Messages: []llm.Message{openai.NewUserMessage("Hi")},
 	})
@@ -80,10 +80,10 @@ func TestChatStream_ClosedError(t *testing.T) {
 }
 
 func TestCollectToolCalls(t *testing.T) {
-	deltas := []openai.ToolCallDelta{
-		{Index: 0, ID: "call_1", Type: "function", Function: openai.FunctionCallDelta{Name: "get_w"}},
-		{Index: 0, Function: openai.FunctionCallDelta{Name: "eather", Arguments: `{"ci`}},
-		{Index: 0, Function: openai.FunctionCallDelta{Arguments: `ty":"Tokyo"}`}},
+	deltas := []llm.ToolCallDelta{
+		{Index: 0, ID: "call_1", Type: "function", Function: llm.FunctionCallDelta{Name: "get_w"}},
+		{Index: 0, Function: llm.FunctionCallDelta{Name: "eather", Arguments: `{"ci`}},
+		{Index: 0, Function: llm.FunctionCallDelta{Arguments: `ty":"Tokyo"}`}},
 	}
 
 	calls := openai.CollectToolCalls(deltas)

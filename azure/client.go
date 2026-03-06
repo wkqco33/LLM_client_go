@@ -12,6 +12,9 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	llm "llm-client-go"
+	"llm-client-go/retry"
 )
 
 const defaultAPIVersion = "2024-02-01"
@@ -26,6 +29,41 @@ type Client struct {
 
 	// Chat exposes the Chat Completions API.
 	Chat *ChatService
+}
+
+// Complete implements the llm.Client interface.
+func (c *Client) Complete(ctx context.Context, req llm.ChatRequest) (*llm.ChatResponse, error) {
+	return c.Chat.Complete(ctx, req)
+}
+
+// Stream implements the llm.Client interface.
+func (c *Client) Stream(ctx context.Context, req llm.ChatRequest) (llm.Stream, error) {
+	return c.Chat.Stream(ctx, req)
+}
+
+// CreateEmbeddings implements the llm.Client interface.
+func (c *Client) CreateEmbeddings(ctx context.Context, req llm.EmbeddingRequest) (*llm.EmbeddingResponse, error) {
+	url := c.deploymentURL(req.Model, "/embeddings")
+	resp, err := c.do(ctx, http.MethodPost, url, req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, parseErrorResponse(resp)
+	}
+
+	var result llm.EmbeddingResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("azure: decode embedding response: %w", err)
+	}
+	return &result, nil
+}
+
+// TokenCounter implements the llm.Client interface.
+func (c *Client) TokenCounter(model string) any {
+	return nil
 }
 
 // Config holds configuration for the Azure OpenAI client.
@@ -47,6 +85,9 @@ type Config struct {
 	// Timeout sets the HTTP request timeout.
 	// Defaults to 60 seconds.
 	Timeout time.Duration
+
+	// RetryPolicy configures automatic retries for failed requests.
+	RetryPolicy *retry.Policy
 }
 
 // Option is a functional option for configuring the Azure client.
@@ -67,6 +108,13 @@ func WithAPIVersion(version string) Option {
 	return func(c *Client) { c.apiVersion = version }
 }
 
+// WithRetryPolicy sets the retry policy for the client.
+func WithRetryPolicy(p retry.Policy) Option {
+	return func(c *Client) {
+		c.httpClient.Transport = retry.NewRoundTripper(c.httpClient.Transport, p)
+	}
+}
+
 // New creates a new Azure OpenAI Client from the provided Config.
 func New(cfg Config, opts ...Option) *Client {
 	apiVersion := cfg.APIVersion
@@ -82,6 +130,11 @@ func New(cfg Config, opts ...Option) *Client {
 	hc := cfg.HTTPClient
 	if hc == nil {
 		hc = &http.Client{Timeout: timeout}
+	}
+
+	// Apply retry policy from config if provided
+	if cfg.RetryPolicy != nil {
+		hc.Transport = retry.NewRoundTripper(hc.Transport, *cfg.RetryPolicy)
 	}
 
 	endpoint := strings.TrimRight(cfg.Endpoint, "/")
