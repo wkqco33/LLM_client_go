@@ -15,6 +15,7 @@ import (
 
 	llm "llm-client-go"
 	"llm-client-go/retry"
+	"llm-client-go/token"
 )
 
 const defaultAPIVersion = "2024-02-01"
@@ -63,7 +64,7 @@ func (c *Client) CreateEmbeddings(ctx context.Context, req llm.EmbeddingRequest)
 
 // TokenCounter implements the llm.Client interface.
 func (c *Client) TokenCounter(model string) any {
-	return nil
+	return token.HeuristicCounter{}
 }
 
 // Config holds configuration for the Azure OpenAI client.

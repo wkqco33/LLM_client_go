@@ -712,3 +712,23 @@ func TestComplete_FunctionCalling_FullFlow(t *testing.T) {
 		t.Errorf("expected exactly 2 API calls, got %d", turnCount)
 	}
 }
+
+// ─── TokenCounter 검증 ────────────────────────────────────────
+
+func TestTokenCounter_ReturnsHeuristicCounter(t *testing.T) {
+	client := openai.New(openai.Config{APIKey: "key"})
+	counter := client.TokenCounter("gpt-4o")
+	if counter == nil {
+		t.Fatal("expected non-nil TokenCounter, got nil")
+	}
+	tc, ok := counter.(interface {
+		Count(string) int
+		CountMessages([]llm.Message) int
+	})
+	if !ok {
+		t.Fatalf("expected token.Counter interface, got %T", counter)
+	}
+	if n := tc.Count("hello world"); n == 0 {
+		t.Error("expected non-zero token count for 'hello world'")
+	}
+}

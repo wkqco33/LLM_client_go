@@ -3,7 +3,7 @@ package openai
 import (
 	"context"
 	"encoding/json"
-	"io"
+	"fmt"
 	"net/http"
 
 	llm "llm-client-go"
@@ -28,14 +28,9 @@ func (s *ChatService) Complete(ctx context.Context, req llm.ChatRequest) (*llm.C
 		return nil, parseErrorResponse(resp)
 	}
 
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
-	}
-
 	var result llm.ChatResponse
-	if err := json.Unmarshal(body, &result); err != nil {
-		return nil, err
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("openai: decode response: %w", err)
 	}
 	return &result, nil
 }

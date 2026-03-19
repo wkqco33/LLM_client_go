@@ -2,6 +2,7 @@ package bots
 
 import (
 	"sync"
+	"time"
 
 	llm "llm-client-go"
 )
@@ -13,7 +14,9 @@ const defaultMaxHistory = 20
 type SessionManager struct {
 	mu         sync.RWMutex
 	sessions   map[string][]llm.Message
+	lastSeen   map[string]time.Time
 	maxHistory int
+	ttl        time.Duration
 	systemMsg  *llm.Message
 }
 
@@ -34,16 +37,43 @@ func WithSystemPrompt(content string) SessionOption {
 	}
 }
 
+// WithTTL sets the time-to-live for inactive sessions.
+// Sessions not accessed within the TTL are automatically removed.
+// 0 means no expiration (default).
+func WithTTL(d time.Duration) SessionOption {
+	return func(sm *SessionManager) { sm.ttl = d }
+}
+
 // NewSessionManager creates a new SessionManager with the given options.
 func NewSessionManager(opts ...SessionOption) *SessionManager {
 	sm := &SessionManager{
 		sessions:   make(map[string][]llm.Message),
+		lastSeen:   make(map[string]time.Time),
 		maxHistory: defaultMaxHistory,
 	}
 	for _, o := range opts {
 		o(sm)
 	}
+	if sm.ttl > 0 {
+		go sm.cleanupLoop()
+	}
 	return sm
+}
+
+func (sm *SessionManager) cleanupLoop() {
+	ticker := time.NewTicker(sm.ttl / 2)
+	defer ticker.Stop()
+	for range ticker.C {
+		now := time.Now()
+		sm.mu.Lock()
+		for id, t := range sm.lastSeen {
+			if now.Sub(t) > sm.ttl {
+				delete(sm.sessions, id)
+				delete(sm.lastSeen, id)
+			}
+		}
+		sm.mu.Unlock()
+	}
 }
 
 // GetHistory returns a copy of the conversation history for the given user ID.
@@ -65,6 +95,10 @@ func (sm *SessionManager) Append(userID string, msg llm.Message) {
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
 
+	if sm.ttl > 0 {
+		sm.lastSeen[userID] = time.Now()
+	}
+
 	history := sm.sessions[userID]
 
 	// Initialize with system message if configured and history is empty.
@@ -82,6 +116,7 @@ func (sm *SessionManager) Reset(userID string) {
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
 	delete(sm.sessions, userID)
+	delete(sm.lastSeen, userID)
 }
 
 // trim removes the oldest non-system messages when history exceeds maxHistory.

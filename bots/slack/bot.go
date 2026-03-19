@@ -104,7 +104,7 @@ func (b *Bot) Start(ctx context.Context) error {
 		b.Stop()
 	}()
 
-	go b.handleEvents()
+	go b.handleEvents(ctx)
 	return b.sm.Run()
 }
 
@@ -114,21 +114,29 @@ func (b *Bot) Stop() error {
 	return nil
 }
 
-func (b *Bot) handleEvents() {
-	for evt := range b.sm.Events {
-		switch evt.Type {
-		case socketmode.EventTypeEventsAPI:
-			eventsAPIEvent, ok := evt.Data.(slackevents.EventsAPIEvent)
+func (b *Bot) handleEvents(ctx context.Context) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case evt, ok := <-b.sm.Events:
 			if !ok {
-				continue
+				return
 			}
-			b.sm.Ack(*evt.Request)
-			b.dispatchEvent(eventsAPIEvent)
+			switch evt.Type {
+			case socketmode.EventTypeEventsAPI:
+				eventsAPIEvent, ok := evt.Data.(slackevents.EventsAPIEvent)
+				if !ok {
+					continue
+				}
+				b.sm.Ack(*evt.Request)
+				b.dispatchEvent(ctx, eventsAPIEvent)
+			}
 		}
 	}
 }
 
-func (b *Bot) dispatchEvent(event slackevents.EventsAPIEvent) {
+func (b *Bot) dispatchEvent(ctx context.Context, event slackevents.EventsAPIEvent) {
 	switch event.InnerEvent.Type {
 	case "app_mention":
 		ev, ok := event.InnerEvent.Data.(*slackevents.AppMentionEvent)
@@ -137,7 +145,7 @@ func (b *Bot) dispatchEvent(event slackevents.EventsAPIEvent) {
 		}
 		// Strip the @BotMention prefix from the message text.
 		text := strings.TrimSpace(stripMention(ev.Text))
-		go b.handleMessage(ev.User, ev.Channel, text)
+		go b.handleMessage(ctx, ev.User, ev.Channel, text)
 
 	case "message":
 		ev, ok := event.InnerEvent.Data.(*slackevents.MessageEvent)
@@ -148,11 +156,11 @@ func (b *Bot) dispatchEvent(event slackevents.EventsAPIEvent) {
 		if ev.BotID != "" || ev.User == b.botUserID {
 			return
 		}
-		go b.handleMessage(ev.User, ev.Channel, strings.TrimSpace(ev.Text))
+		go b.handleMessage(ctx, ev.User, ev.Channel, strings.TrimSpace(ev.Text))
 	}
 }
 
-func (b *Bot) handleMessage(userID, channelID, text string) {
+func (b *Bot) handleMessage(ctx context.Context, userID, channelID, text string) {
 	if text == "" {
 		return
 	}
@@ -166,7 +174,7 @@ func (b *Bot) handleMessage(userID, channelID, text string) {
 	b.sessions.Append(userID, llm.Message{Role: llm.RoleUser, Content: text})
 	history := b.sessions.GetHistory(userID)
 
-	reply, err := b.backend.Complete(context.Background(), history)
+	reply, err := b.backend.Complete(ctx, history)
 	if err != nil {
 		b.log.Printf("slack: backend error: %v", err)
 		b.send(channelID, "⚠️ Error getting response. Please try again.")

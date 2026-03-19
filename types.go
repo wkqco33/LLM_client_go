@@ -115,13 +115,13 @@ type StreamOptions struct {
 
 // ChatResponse is the response from a non-streaming chat completion.
 type ChatResponse struct {
-	ID                string    `json:"id"`
-	Object            string    `json:"object"`
-	Created           int64     `json:"created"`
-	Model             string    `json:"model"`
-	Choices           []Choice  `json:"choices"`
-	Usage             Usage     `json:"usage"`
-	SystemFingerprint string    `json:"system_fingerprint,omitempty"`
+	ID                string   `json:"id"`
+	Object            string   `json:"object"`
+	Created           int64    `json:"created"`
+	Model             string   `json:"model"`
+	Choices           []Choice `json:"choices"`
+	Usage             Usage    `json:"usage"`
+	SystemFingerprint string   `json:"system_fingerprint,omitempty"`
 }
 
 // Choice is a single completion candidate.

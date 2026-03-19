@@ -1,5 +1,7 @@
-// Package anthropic provides a client for the Anthropic Messages API.
-package anthropic
+// Package gemini provides a client for the Google Gemini API (v1beta).
+// The Gemini API uses a different request/response format than OpenAI,
+// so this package handles the conversion to/from the common llm types.
+package gemini
 
 import (
 	"bytes"
@@ -15,18 +17,16 @@ import (
 	"llm-client-go/token"
 )
 
-const defaultBaseURL = "https://api.anthropic.com/v1"
-const defaultAPIVersion = "2023-06-01"
+const defaultBaseURL = "https://generativelanguage.googleapis.com/v1beta"
 const defaultTimeout = 60 * time.Second
 
-// Client is the Anthropic API client.
+// Client is the Google Gemini API client.
 type Client struct {
 	apiKey     string
-	apiVersion string
 	baseURL    string
 	httpClient *http.Client
 
-	// Chat exposes the Messages API.
+	// Chat exposes the generateContent API.
 	Chat *ChatService
 }
 
@@ -41,9 +41,9 @@ func (c *Client) Stream(ctx context.Context, req llm.ChatRequest) (llm.Stream, e
 }
 
 // CreateEmbeddings implements the llm.Client interface.
-// Note: Anthropic does not provide an embeddings API directly.
+// Note: Gemini embedding models use a separate endpoint not covered here.
 func (c *Client) CreateEmbeddings(ctx context.Context, req llm.EmbeddingRequest) (*llm.EmbeddingResponse, error) {
-	return nil, fmt.Errorf("anthropic: embeddings API is not supported by this provider")
+	return nil, fmt.Errorf("gemini: use the embedContent endpoint for embeddings (not supported by this client)")
 }
 
 // TokenCounter implements the llm.Client interface.
@@ -51,17 +51,13 @@ func (c *Client) TokenCounter(model string) any {
 	return token.HeuristicCounter{}
 }
 
-// Config holds configuration for the Anthropic client.
+// Config holds configuration for the Gemini client.
 type Config struct {
-	// APIKey is the Anthropic API key (required).
+	// APIKey is the Google AI API key (required).
 	APIKey string
 
-	// APIVersion overrides the default API version.
-	// Defaults to "2023-06-01".
-	APIVersion string
-
 	// BaseURL overrides the default API endpoint.
-	// Defaults to https://api.anthropic.com/v1
+	// Defaults to https://generativelanguage.googleapis.com/v1beta
 	BaseURL string
 
 	// HTTPClient overrides the default HTTP client.
@@ -100,16 +96,11 @@ func WithRetryPolicy(p retry.Policy) Option {
 	}
 }
 
-// New creates a new Anthropic Client from the provided Config.
+// New creates a new Gemini Client from the provided Config.
 func New(cfg Config, opts ...Option) *Client {
 	baseURL := cfg.BaseURL
 	if baseURL == "" {
 		baseURL = defaultBaseURL
-	}
-
-	apiVersion := cfg.APIVersion
-	if apiVersion == "" {
-		apiVersion = defaultAPIVersion
 	}
 
 	timeout := cfg.Timeout
@@ -122,14 +113,12 @@ func New(cfg Config, opts ...Option) *Client {
 		hc = &http.Client{Timeout: timeout}
 	}
 
-	// Apply retry policy from config if provided
 	if cfg.RetryPolicy != nil {
 		hc.Transport = retry.NewRoundTripper(hc.Transport, *cfg.RetryPolicy)
 	}
 
 	c := &Client{
 		apiKey:     cfg.APIKey,
-		apiVersion: apiVersion,
 		baseURL:    baseURL,
 		httpClient: hc,
 	}
@@ -142,30 +131,50 @@ func New(cfg Config, opts ...Option) *Client {
 	return c
 }
 
-// do executes an HTTP request with Anthropic auth headers.
-func (c *Client) do(ctx context.Context, method, path string, body any) (*http.Response, error) {
-	var reqBody io.Reader
-	if body != nil {
-		data, err := json.Marshal(body)
-		if err != nil {
-			return nil, fmt.Errorf("anthropic: marshal request: %w", err)
-		}
-		reqBody = bytes.NewReader(data)
-	}
+// modelURL builds the full URL for a model action.
+// e.g., https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent?key=...
+func (c *Client) modelURL(model, action string) string {
+	return fmt.Sprintf("%s/models/%s:%s?key=%s", c.baseURL, model, action, c.apiKey)
+}
 
-	req, err := http.NewRequestWithContext(ctx, method, c.baseURL+path, reqBody)
+// do executes an HTTP POST request to a Gemini endpoint.
+func (c *Client) do(ctx context.Context, url string, body any) (*http.Response, error) {
+	data, err := json.Marshal(body)
 	if err != nil {
-		return nil, fmt.Errorf("anthropic: create request: %w", err)
+		return nil, fmt.Errorf("gemini: marshal request: %w", err)
 	}
 
-	req.Header.Set("x-api-key", c.apiKey)
-	req.Header.Set("anthropic-version", c.apiVersion)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(data))
+	if err != nil {
+		return nil, fmt.Errorf("gemini: create request: %w", err)
+	}
+
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("anthropic: http request: %w", err)
+		return nil, fmt.Errorf("gemini: http request: %w", err)
 	}
 
 	return resp, nil
+}
+
+// doGet executes an HTTP GET request (used for future endpoints).
+func (c *Client) doGet(ctx context.Context, url string) (*http.Response, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("gemini: create request: %w", err)
+	}
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("gemini: http request: %w", err)
+	}
+
+	return resp, nil
+}
+
+// readBody is a helper to read and close a response body.
+func readBody(r io.Reader) ([]byte, error) {
+	return io.ReadAll(r)
 }

@@ -13,6 +13,7 @@ import (
 
 	llm "llm-client-go"
 	"llm-client-go/retry"
+	"llm-client-go/token"
 )
 
 const defaultBaseURL = "https://api.openai.com/v1"
@@ -59,7 +60,7 @@ func (c *Client) CreateEmbeddings(ctx context.Context, req llm.EmbeddingRequest)
 
 // TokenCounter implements the llm.Client interface.
 func (c *Client) TokenCounter(model string) any {
-	return nil // Use default token estimator if not specialized
+	return token.HeuristicCounter{}
 }
 
 // Config holds configuration for the OpenAI client.

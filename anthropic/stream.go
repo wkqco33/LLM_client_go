@@ -15,6 +15,7 @@ import (
 type Stream struct {
 	resp    *http.Response
 	scanner *bufio.Scanner
+	done    chan struct{}
 	closed  bool
 }
 
@@ -52,10 +53,19 @@ func (s *ChatService) Stream(ctx context.Context, req llm.ChatRequest) (llm.Stre
 		return nil, parseErrorResponse(resp)
 	}
 
-	return &Stream{
+	st := &Stream{
 		resp:    resp,
 		scanner: bufio.NewScanner(resp.Body),
-	}, nil
+		done:    make(chan struct{}),
+	}
+	go func() {
+		select {
+		case <-ctx.Done():
+			st.Close()
+		case <-st.done:
+		}
+	}()
+	return st, nil
 }
 
 // Next reads the next chunk and maps it to the common llm.ChatStreamChunk.
@@ -139,5 +149,6 @@ func (s *Stream) Close() error {
 		return nil
 	}
 	s.closed = true
+	close(s.done)
 	return s.resp.Body.Close()
 }

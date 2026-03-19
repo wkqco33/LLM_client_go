@@ -88,8 +88,14 @@ func (c *HttpClient) ListTools(ctx context.Context) ([]Tool, error) {
 }
 
 func (c *HttpClient) CallTool(ctx context.Context, name string, arguments map[string]any) (*CallToolResponse, error) {
-	payload, _ := json.Marshal(CallToolRequest{Name: name, Arguments: arguments})
-	req, _ := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+"/tools/call", bytes.NewReader(payload))
+	payload, err := json.Marshal(CallToolRequest{Name: name, Arguments: arguments})
+	if err != nil {
+		return nil, fmt.Errorf("mcp http: marshal request: %w", err)
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+"/tools/call", bytes.NewReader(payload))
+	if err != nil {
+		return nil, fmt.Errorf("mcp http: create request: %w", err)
+	}
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := c.httpClient.Do(req)
@@ -107,11 +113,21 @@ func (c *HttpClient) CallTool(ctx context.Context, name string, arguments map[st
 
 // ─── Stdio Client Implementation (JSON-RPC) ────────────────────
 
+const defaultStdioTimeout = 30 * time.Second
+
+// StdioConfig holds configuration for StdioClient.
+type StdioConfig struct {
+	// Timeout is the maximum time to wait for a response from the MCP server.
+	// Defaults to 30 seconds.
+	Timeout time.Duration
+}
+
 type StdioClient struct {
 	cmd    *exec.Cmd
 	stdin  io.WriteCloser
 	stdout *bufio.Scanner
 
+	timeout  time.Duration
 	mu       sync.Mutex
 	id       int
 	pending  map[int]chan jsonRPCResponse
@@ -142,6 +158,16 @@ func (e *jsonRPCError) Error() string {
 }
 
 func NewStdioClient(command string, args ...string) (*StdioClient, error) {
+	return NewStdioClientWithConfig(StdioConfig{}, command, args...)
+}
+
+// NewStdioClientWithConfig creates a StdioClient with custom configuration.
+func NewStdioClientWithConfig(cfg StdioConfig, command string, args ...string) (*StdioClient, error) {
+	timeout := cfg.Timeout
+	if timeout == 0 {
+		timeout = defaultStdioTimeout
+	}
+
 	cmd := exec.Command(command, args...)
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
@@ -160,6 +186,7 @@ func NewStdioClient(command string, args ...string) (*StdioClient, error) {
 		cmd:     cmd,
 		stdin:   stdin,
 		stdout:  bufio.NewScanner(stdout),
+		timeout: timeout,
 		pending: make(map[int]chan jsonRPCResponse),
 	}
 
@@ -184,9 +211,11 @@ func (c *StdioClient) readLoop() {
 		ch, ok := c.pending[resp.ID]
 		if ok {
 			delete(c.pending, resp.ID)
-			ch <- resp
 		}
 		c.mu.Unlock()
+		if ok {
+			ch <- resp
+		}
 	}
 
 	c.mu.Lock()
@@ -218,7 +247,13 @@ func (c *StdioClient) call(ctx context.Context, method string, params any) (json
 		Params:  params,
 	}
 
-	data, _ := json.Marshal(req)
+	data, err := json.Marshal(req)
+	if err != nil {
+		c.mu.Lock()
+		delete(c.pending, id)
+		c.mu.Unlock()
+		return nil, fmt.Errorf("mcp stdio: marshal request: %w", err)
+	}
 	fmt.Fprintln(c.stdin, string(data))
 
 	select {
@@ -228,8 +263,14 @@ func (c *StdioClient) call(ctx context.Context, method string, params any) (json
 		}
 		return resp.Result, nil
 	case <-ctx.Done():
+		c.mu.Lock()
+		delete(c.pending, id)
+		c.mu.Unlock()
 		return nil, ctx.Err()
-	case <-time.After(30 * time.Second):
+	case <-time.After(c.timeout):
+		c.mu.Lock()
+		delete(c.pending, id)
+		c.mu.Unlock()
 		return nil, fmt.Errorf("mcp stdio: request timeout")
 	}
 }

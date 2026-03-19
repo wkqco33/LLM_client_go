@@ -127,7 +127,9 @@ func (s *ChatService) toAnthropicRequest(req llm.ChatRequest) (*messageRequest, 
 			}
 			for _, tc := range m.ToolCalls {
 				var input any
-				json.Unmarshal([]byte(tc.Function.Arguments), &input)
+				if err := json.Unmarshal([]byte(tc.Function.Arguments), &input); err != nil {
+					return nil, fmt.Errorf("anthropic: parse tool arguments: %w", err)
+				}
 				blocks = append(blocks, contentBlock{
 					Type:  "tool_use",
 					ID:    tc.ID,
