@@ -1,0 +1,330 @@
+# ============================================================
+# LLM Client Go — Taskfile
+# https://taskfile.dev
+# ============================================================
+
+version: "3"
+
+vars:
+  MODULE: llm-client-go
+  GOPATH:
+    sh: go env GOPATH
+  GOBIN: "{{.GOPATH}}/bin"
+
+  # 빌드 결과물 디렉토리
+  BUILD_DIR: bin
+
+  # 봇 예제
+  BOTS: discord_bot telegram_bot slack_bot
+
+  # 예제
+  EXAMPLES: openai_chat openai_stream openai_tools ollama_chat azure_chat azure_stream
+
+  # 빌드 플래그
+  LDFLAGS: -s -w
+  GOFLAGS: -trimpath
+
+  # 크로스컴파일 대상 플랫폼 (OS/ARCH)
+  PLATFORMS: linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64
+
+tasks:
+  default:
+    desc: 사용 가능한 명령어 목록 출력
+    silent: true
+    cmds:
+      - task --list-all
+
+  # ─── 의존성 ────────────────────────────────────────────────
+
+  deps:
+    desc: 의존성 다운로드 (go mod download)
+    cmds:
+      - go mod download
+
+  deps:tidy:
+    desc: go.mod / go.sum 정리 (go mod tidy)
+    cmds:
+      - go mod tidy
+
+  deps:update:
+    desc: 모든 의존성을 최신 버전으로 업데이트
+    cmds:
+      - go get -u ./...
+      - go mod tidy
+
+  # ─── 빌드 ──────────────────────────────────────────────────
+
+  build:
+    desc: 봇 + 예제 전체 빌드
+    cmds:
+      - task: build:bots
+      - task: build:examples
+
+  build:bots:
+    desc: "봇 바이너리 빌드 (discord_bot, telegram_bot, slack_bot)"
+    cmds:
+      - mkdir -p {{.BUILD_DIR}}
+      - echo "▶ Building bots..."
+      - |
+        for name in {{.BOTS}}; do
+          echo "  → $name"
+          go build {{.GOFLAGS}} -ldflags "{{.LDFLAGS}}" -o {{.BUILD_DIR}}/$name ./examples/$name || exit 1
+        done
+
+  build:examples:
+    desc: 예제 바이너리 빌드
+    cmds:
+      - mkdir -p {{.BUILD_DIR}}
+      - echo "▶ Building examples..."
+      - |
+        for name in {{.EXAMPLES}}; do
+          echo "  → $name"
+          go build {{.GOFLAGS}} -ldflags "{{.LDFLAGS}}" -o {{.BUILD_DIR}}/$name ./examples/$name || exit 1
+        done
+
+  build:all:
+    desc: build 와 동일 (전체 빌드)
+    cmds:
+      - task: build
+
+  # ─── 크로스컴파일 ──────────────────────────────────────────
+
+  build:cross:
+    desc: 전 플랫폼 크로스컴파일 (bots + examples)
+    cmds:
+      - task: build:cross:bots
+      - task: build:cross:examples
+
+  build:cross:bots:
+    desc: "봇 바이너리 크로스컴파일 (bin/<os>_<arch>/)"
+    cmds:
+      - 'echo "▶ Cross-compiling bots for: {{.PLATFORMS}}"'
+      - |
+        for platform in {{.PLATFORMS}}; do
+          os=$(echo $platform | cut -d/ -f1)
+          arch=$(echo $platform | cut -d/ -f2)
+          outdir="{{.BUILD_DIR}}/${os}_${arch}"
+          mkdir -p "$outdir"
+          echo "  [$os/$arch]"
+          for name in {{.BOTS}}; do
+            out="$outdir/$name"
+            [ "$os" = "windows" ] && out="${out}.exe"
+            echo "    → $name"
+            GOOS=$os GOARCH=$arch go build {{.GOFLAGS}} -ldflags "{{.LDFLAGS}}" -o "$out" ./examples/$name || exit 1
+          done
+        done
+
+  build:cross:examples:
+    desc: "예제 바이너리 크로스컴파일 (bin/<os>_<arch>/)"
+    cmds:
+      - 'echo "▶ Cross-compiling examples for: {{.PLATFORMS}}"'
+      - |
+        for platform in {{.PLATFORMS}}; do
+          os=$(echo $platform | cut -d/ -f1)
+          arch=$(echo $platform | cut -d/ -f2)
+          outdir="{{.BUILD_DIR}}/${os}_${arch}"
+          mkdir -p "$outdir"
+          echo "  [$os/$arch]"
+          for name in {{.EXAMPLES}}; do
+            out="$outdir/$name"
+            [ "$os" = "windows" ] && out="${out}.exe"
+            echo "    → $name"
+            GOOS=$os GOARCH=$arch go build {{.GOFLAGS}} -ldflags "{{.LDFLAGS}}" -o "$out" ./examples/$name || exit 1
+          done
+        done
+
+  # ─── 실행 ──────────────────────────────────────────────────
+
+  run:discord:
+    desc: "Discord 봇 실행 (필요: DISCORD_BOT_TOKEN; 백엔드 기본값 Ollama, BACKEND=openai/azure로 전환 가능)"
+    cmds:
+      - go run ./examples/discord_bot
+
+  run:telegram:
+    desc: "Telegram 봇 실행 (필요: TELEGRAM_BOT_TOKEN; 백엔드 기본값 Ollama, BACKEND=openai/azure로 전환 가능)"
+    cmds:
+      - go run ./examples/telegram_bot
+
+  run:slack:
+    desc: "Slack 봇 실행 (필요: SLACK_BOT_TOKEN, SLACK_APP_TOKEN; 백엔드 기본값 Ollama, BACKEND=openai/azure로 전환 가능)"
+    cmds:
+      - go run ./examples/slack_bot
+
+  run:ollama-chat:
+    desc: Ollama 채팅 예제 실행 (로컬에서 ollama serve 필요)
+    cmds:
+      - go run ./examples/ollama_chat
+
+  run:openai-chat:
+    desc: OpenAI 채팅 예제 실행
+    cmds:
+      - go run ./examples/openai_chat
+
+  run:openai-stream:
+    desc: OpenAI 스트리밍 예제 실행
+    cmds:
+      - go run ./examples/openai_stream
+
+  run:openai-tools:
+    desc: OpenAI Function Calling 예제 실행
+    cmds:
+      - go run ./examples/openai_tools
+
+  run:azure-chat:
+    desc: Azure OpenAI 채팅 예제 실행
+    cmds:
+      - go run ./examples/azure_chat
+
+  run:azure-stream:
+    desc: Azure OpenAI 스트리밍 예제 실행
+    cmds:
+      - go run ./examples/azure_stream
+
+  # ─── 테스트 ────────────────────────────────────────────────
+
+  test:
+    desc: 전체 테스트 실행
+    cmds:
+      - go test ./...
+
+  test:verbose:
+    desc: 전체 테스트 실행 (상세 출력)
+    cmds:
+      - go test -v ./...
+
+  test:coverage:
+    desc: 커버리지 리포트 생성 (coverage.html)
+    cmds:
+      - go test -coverprofile=coverage.out ./...
+      - go tool cover -html=coverage.out -o coverage.html
+      - echo "Coverage report -> coverage.html"
+
+  test:race:
+    desc: 레이스 컨디션 감지 포함 테스트
+    cmds:
+      - go test -race ./...
+
+  # ─── 코드 품질 ─────────────────────────────────────────────
+
+  lint:
+    desc: go vet 정적 분석 실행
+    cmds:
+      - go vet ./...
+
+  fmt:
+    desc: 코드 포매팅 (gofmt)
+    cmds:
+      - gofmt -w -s .
+
+  fmt:check:
+    desc: 포매팅 검사만 수행 (수정 없음)
+    cmds:
+      - |
+        out=$(gofmt -l .)
+        if [ -n "$out" ]; then
+          echo "포매팅이 필요한 파일:"; echo "$out"; exit 1
+        else
+          echo "모든 파일이 올바르게 포매팅되어 있습니다."
+        fi
+
+  # ─── 설치 / 제거 ───────────────────────────────────────────
+
+  install:
+    desc: "봇 바이너리를 GOBIN에 설치"
+    deps: [build]
+    cmds:
+      - echo "▶ Installing bots to {{.GOBIN}}..."
+      - |
+        mkdir -p "{{.GOBIN}}"
+        for name in {{.BOTS}}; do
+          echo "  → $name"
+          cp "{{.BUILD_DIR}}/$name" "{{.GOBIN}}/$name"
+        done
+      - echo "✅ 설치 완료. PATH에 {{.GOBIN}}이 포함되어 있는지 확인하세요."
+
+  uninstall:
+    desc: GOBIN에서 봇 바이너리 제거
+    cmds:
+      - echo "▶ Uninstalling bots from {{.GOBIN}}..."
+      - |
+        for name in {{.BOTS}}; do
+          if [ -f "{{.GOBIN}}/$name" ]; then
+            echo "  → removing $name"
+            rm -f "{{.GOBIN}}/$name"
+          fi
+        done
+      - echo "✅ 제거 완료."
+
+  # ─── 정리 ──────────────────────────────────────────────────
+
+  clean:
+    desc: 빌드 결과물(bin/) 및 커버리지 파일 삭제
+    cmds:
+      - echo "▶ Cleaning..."
+      - rm -rf {{.BUILD_DIR}} coverage.out coverage.html
+      - echo "✅ 완료."
+
+  clean:cache:
+    desc: Go 빌드 캐시 삭제
+    cmds:
+      - go clean -cache
+
+  clean:all:
+    desc: 빌드 결과물 + Go 캐시 전체 삭제
+    cmds:
+      - task: clean
+      - task: clean:cache
+
+  # ─── 정보 ──────────────────────────────────────────────────
+
+  info:
+    desc: 환경 정보 출력 (Go 버전, GOPATH, GOBIN 등)
+    silent: true
+    cmds:
+      - 'echo "  Module  : {{.MODULE}}"'
+      - 'echo "  Go      : $(go version)"'
+      - 'echo "  GOPATH  : {{.GOPATH}}"'
+      - 'echo "  GOBIN   : {{.GOBIN}}"'
+      - 'echo "  Build   : {{.BUILD_DIR}}/"'
+      - 'echo "  Bots    : {{.BOTS}}"'
+      - 'echo "  Examples: {{.EXAMPLES}}"'
+
+  check-env:discord:
+    desc: Discord 봇에 필요한 환경변수 확인
+    cmds:
+      - |
+        missing=""
+        [ -z "$DISCORD_BOT_TOKEN" ] && missing="$missing DISCORD_BOT_TOKEN"
+        [ -z "$OPENAI_API_KEY" ] && missing="$missing OPENAI_API_KEY"
+        if [ -n "$missing" ]; then
+          echo "❌ 누락된 환경변수:$missing"; exit 1
+        else
+          echo "✅ Discord 환경변수 OK"
+        fi
+
+  check-env:telegram:
+    desc: Telegram 봇에 필요한 환경변수 확인
+    cmds:
+      - |
+        missing=""
+        [ -z "$TELEGRAM_BOT_TOKEN" ] && missing="$missing TELEGRAM_BOT_TOKEN"
+        [ -z "$OPENAI_API_KEY" ] && missing="$missing OPENAI_API_KEY"
+        if [ -n "$missing" ]; then
+          echo "❌ 누락된 환경변수:$missing"; exit 1
+        else
+          echo "✅ Telegram 환경변수 OK"
+        fi
+
+  check-env:slack:
+    desc: Slack 봇에 필요한 환경변수 확인
+    cmds:
+      - |
+        missing=""
+        [ -z "$SLACK_BOT_TOKEN" ] && missing="$missing SLACK_BOT_TOKEN"
+        [ -z "$SLACK_APP_TOKEN" ] && missing="$missing SLACK_APP_TOKEN"
+        [ -z "$OPENAI_API_KEY" ] && missing="$missing OPENAI_API_KEY"
+        if [ -n "$missing" ]; then
+          echo "❌ 누락된 환경변수:$missing"; exit 1
+        else
+          echo "✅ Slack 환경변수 OK"
+        fi
