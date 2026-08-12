@@ -40,10 +40,9 @@ llm-client-go/
 어떤 프로바이더든 `llm.Client` 인터페이스를 구현하므로 동일한 방식으로 요청을 보낼 수 있습니다.
 
 ```go
-// OpenAI, Azure, Ollama(로컬) 중 선택
+// OpenAI, Azure, Ollama(로컬) 중 선택 — 재시도는 기본 적용되므로 별도 설정 불필요
 var client llm.Client = openai.New(openai.Config{
     APIKey: os.Getenv("OPENAI_API_KEY"),
-    RetryPolicy: &retry.DefaultPolicy, // 자동 재시도 활성화
 })
 
 resp, err := client.Complete(ctx, llm.ChatRequest{
@@ -59,6 +58,7 @@ resp, err := client.Complete(ctx, llm.ChatRequest{
 ## 2. 에이전트 및 도구 자동화
 
 `agent.Runner`를 사용하면 모델이 도구 호출을 요청했을 때 로컬 함수를 실행하고 결과를 다시 전달하는 루프를 자동으로 수행합니다.
+한 턴에 여러 도구를 동시에 요청하면 병렬로 실행되며, 결과는 원래 요청 순서대로 대화 기록에 반영됩니다.
 
 ```go
 runner := agent.NewRunner(client, "gpt-4o", 
@@ -99,9 +99,12 @@ runner.Run(ctx, messages)
 
 ### 자동 재시도 (Retry)
 
-네트워크 오류나 429(Rate Limit) 발생 시 서버의 `Retry-After` 헤더를 준수하며 지수 백오프를 수행합니다.
+네트워크 오류나 429(Rate Limit)/5xx 발생 시 서버의 `Retry-After` 헤더를 준수하며 지수 백오프를 수행합니다.
+`RetryPolicy`를 따로 지정하지 않아도 `retry.DefaultPolicy`(최대 3회, 지수 백오프)가 모든 클라이언트에
+기본 적용됩니다.
 
 ```go
+// 정책 커스터마이즈
 policy := retry.Policy{
     MaxRetries: 5,
     MinWait:    2 * time.Second,
@@ -109,6 +112,12 @@ policy := retry.Policy{
 client := openai.New(openai.Config{
     APIKey:      "...",
     RetryPolicy: &policy,
+})
+
+// 재시도 비활성화
+client := openai.New(openai.Config{
+    APIKey:      "...",
+    RetryPolicy: &retry.Policy{}, // MaxRetries: 0
 })
 ```
 
@@ -135,6 +144,24 @@ msgTokens := token.DefaultCounter.CountMessages(history)
 | `ErrBadRequest` | 잘못된 파라미터 요청 (400) |
 | `ErrServerError` | 모델 프로바이더 서버 오류 (5xx) |
 | `ErrStreamClosed` | 닫힌 스트림에 대한 작업 시도 |
+
+---
+
+## 빌드 및 실행 (Task)
+
+빌드/테스트/예제 실행은 [Task](https://taskfile.dev)(`Taskfile.yml`)로 관리합니다.
+
+```bash
+task --list-all       # 사용 가능한 태스크 전체 목록
+task build             # 봇 + 예제 바이너리 빌드 (bin/)
+task build:cross       # 전 플랫폼 크로스컴파일
+task test               # 전체 테스트 실행
+task lint               # go vet
+task fmt                # gofmt
+
+task run:ollama-chat   # Ollama 채팅 예제 실행
+task run:discord        # Discord 봇 실행 (기본 백엔드: Ollama, BACKEND=openai|azure로 전환)
+```
 
 ---
 
