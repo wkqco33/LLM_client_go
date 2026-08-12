@@ -10,7 +10,10 @@ import (
 const defaultMaxHistory = 20
 
 // SessionManager maintains per-user conversation histories in memory.
-// It is safe for concurrent use.
+// It is safe for concurrent use. Call Close when done with it to stop the
+// background TTL cleanup goroutine (see WithTTL) — otherwise an application
+// that creates and discards many SessionManagers will leak one goroutine per
+// instance.
 type SessionManager struct {
 	mu         sync.RWMutex
 	sessions   map[string][]llm.Message
@@ -18,6 +21,9 @@ type SessionManager struct {
 	maxHistory int
 	ttl        time.Duration
 	systemMsg  *llm.Message
+
+	done      chan struct{}
+	closeOnce sync.Once
 }
 
 // SessionOption configures a SessionManager.
@@ -50,6 +56,7 @@ func NewSessionManager(opts ...SessionOption) *SessionManager {
 		sessions:   make(map[string][]llm.Message),
 		lastSeen:   make(map[string]time.Time),
 		maxHistory: defaultMaxHistory,
+		done:       make(chan struct{}),
 	}
 	for _, o := range opts {
 		o(sm)
@@ -60,19 +67,33 @@ func NewSessionManager(opts ...SessionOption) *SessionManager {
 	return sm
 }
 
+// Close stops the background TTL cleanup goroutine started by WithTTL. It's
+// a no-op if TTL wasn't configured, and safe to call multiple times or
+// concurrently.
+func (sm *SessionManager) Close() {
+	sm.closeOnce.Do(func() {
+		close(sm.done)
+	})
+}
+
 func (sm *SessionManager) cleanupLoop() {
 	ticker := time.NewTicker(sm.ttl / 2)
 	defer ticker.Stop()
-	for range ticker.C {
-		now := time.Now()
-		sm.mu.Lock()
-		for id, t := range sm.lastSeen {
-			if now.Sub(t) > sm.ttl {
-				delete(sm.sessions, id)
-				delete(sm.lastSeen, id)
+	for {
+		select {
+		case <-sm.done:
+			return
+		case <-ticker.C:
+			now := time.Now()
+			sm.mu.Lock()
+			for id, t := range sm.lastSeen {
+				if now.Sub(t) > sm.ttl {
+					delete(sm.sessions, id)
+					delete(sm.lastSeen, id)
+				}
 			}
+			sm.mu.Unlock()
 		}
-		sm.mu.Unlock()
 	}
 }
 
@@ -117,6 +138,25 @@ func (sm *SessionManager) Reset(userID string) {
 	defer sm.mu.Unlock()
 	delete(sm.sessions, userID)
 	delete(sm.lastSeen, userID)
+}
+
+// SplitMessage splits text into chunks of at most maxLen characters, for
+// platforms with a per-message length limit (Discord: 2000, Telegram: 4096,
+// Slack: no hard API limit but very long messages should still be chunked).
+// maxLen <= 0 disables chunking.
+func SplitMessage(text string, maxLen int) []string {
+	if maxLen <= 0 || len(text) <= maxLen {
+		return []string{text}
+	}
+	var chunks []string
+	for len(text) > maxLen {
+		chunks = append(chunks, text[:maxLen])
+		text = text[maxLen:]
+	}
+	if text != "" {
+		chunks = append(chunks, text)
+	}
+	return chunks
 }
 
 // trim removes the oldest non-system messages when history exceeds maxHistory.

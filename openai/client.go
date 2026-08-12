@@ -3,15 +3,12 @@
 package openai
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
-	"fmt"
-	"io"
 	"net/http"
 	"time"
 
 	llm "llm-client-go"
+	"llm-client-go/internal/transport"
 	"llm-client-go/retry"
 	"llm-client-go/token"
 )
@@ -45,17 +42,7 @@ func (c *Client) CreateEmbeddings(ctx context.Context, req llm.EmbeddingRequest)
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, parseErrorResponse(resp)
-	}
-
-	var result llm.EmbeddingResponse
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return nil, fmt.Errorf("openai: decode embedding response: %w", err)
-	}
-	return &result, nil
+	return transport.DecodeJSON[llm.EmbeddingResponse]("openai", resp, parseErrorResponse)
 }
 
 // TokenCounter implements the llm.Client interface.
@@ -80,6 +67,7 @@ type Config struct {
 	Timeout time.Duration
 
 	// RetryPolicy configures automatic retries for failed requests.
+	// Defaults to retry.DefaultPolicy; pass &retry.Policy{} to disable retries.
 	RetryPolicy *retry.Policy
 }
 
@@ -103,9 +91,7 @@ func WithTimeout(d time.Duration) Option {
 
 // WithRetryPolicy sets the retry policy for the client.
 func WithRetryPolicy(p retry.Policy) Option {
-	return func(c *Client) {
-		c.httpClient.Transport = retry.NewRoundTripper(c.httpClient.Transport, p)
-	}
+	return func(c *Client) { transport.ApplyRetryPolicy(c.httpClient, p) }
 }
 
 // New creates a new OpenAI Client from the provided Config.
@@ -120,19 +106,10 @@ func New(cfg Config, opts ...Option) *Client {
 		timeout = defaultTimeout
 	}
 
-	hc := cfg.HTTPClient
-	if hc == nil {
-		hc = &http.Client{Timeout: timeout}
-	}
-
-	if cfg.RetryPolicy != nil {
-		hc.Transport = retry.NewRoundTripper(hc.Transport, *cfg.RetryPolicy)
-	}
-
 	c := &Client{
 		apiKey:     cfg.APIKey,
 		baseURL:    baseURL,
-		httpClient: hc,
+		httpClient: transport.BuildHTTPClient(cfg.HTTPClient, timeout, cfg.RetryPolicy),
 	}
 
 	for _, o := range opts {
@@ -145,27 +122,8 @@ func New(cfg Config, opts ...Option) *Client {
 
 // do executes an HTTP request with OpenAI auth headers.
 func (c *Client) do(ctx context.Context, method, path string, body any) (*http.Response, error) {
-	var reqBody io.Reader
-	if body != nil {
-		data, err := json.Marshal(body)
-		if err != nil {
-			return nil, fmt.Errorf("openai: marshal request: %w", err)
-		}
-		reqBody = bytes.NewReader(data)
-	}
-
-	req, err := http.NewRequestWithContext(ctx, method, c.baseURL+path, reqBody)
-	if err != nil {
-		return nil, fmt.Errorf("openai: create request: %w", err)
-	}
-
-	req.Header.Set("Authorization", "Bearer "+c.apiKey)
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("openai: http request: %w", err)
-	}
-
-	return resp, nil
+	return transport.Do(ctx, c.httpClient, "openai", method, c.baseURL+path, body, func(req *http.Request) {
+		req.Header.Set("Authorization", "Bearer "+c.apiKey)
+		req.Header.Set("Content-Type", "application/json")
+	})
 }

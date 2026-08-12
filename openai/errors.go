@@ -7,6 +7,7 @@ import (
 	"net/http"
 
 	llm "llm-client-go"
+	"llm-client-go/internal/apierr"
 )
 
 // parseErrorResponse reads an error response body and returns a structured error.
@@ -26,7 +27,7 @@ func parseErrorResponse(resp *http.Response) error {
 			Type:       wrapper.Error.Type,
 			Param:      wrapper.Error.Param,
 		}
-		return wrapStatusError(resp.StatusCode, apiErr)
+		return apierr.Wrap(resp.StatusCode, apiErr)
 	}
 
 	// Fallback: return a plain API error with the raw body.
@@ -34,7 +35,7 @@ func parseErrorResponse(resp *http.Response) error {
 		StatusCode: resp.StatusCode,
 		Message:    string(body),
 	}
-	return wrapStatusError(resp.StatusCode, apiErr)
+	return apierr.Wrap(resp.StatusCode, apiErr)
 }
 
 type openAIErrorBody struct {
@@ -42,22 +43,4 @@ type openAIErrorBody struct {
 	Message string `json:"message"`
 	Type    string `json:"type"`
 	Param   string `json:"param"`
-}
-
-func wrapStatusError(statusCode int, apiErr *llm.APIError) error {
-	switch statusCode {
-	case http.StatusUnauthorized:
-		return fmt.Errorf("%w: %w", llm.ErrUnauthorized, apiErr)
-	case http.StatusTooManyRequests:
-		return fmt.Errorf("%w: %w", llm.ErrRateLimited, apiErr)
-	case http.StatusNotFound:
-		return fmt.Errorf("%w: %w", llm.ErrNotFound, apiErr)
-	case http.StatusBadRequest:
-		return fmt.Errorf("%w: %w", llm.ErrBadRequest, apiErr)
-	default:
-		if statusCode >= 500 {
-			return fmt.Errorf("%w: %w", llm.ErrServerError, apiErr)
-		}
-		return apiErr
-	}
 }

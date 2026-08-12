@@ -12,6 +12,7 @@ import (
 	llm "llm-client-go"
 	"llm-client-go/ollama"
 	"llm-client-go/openai"
+	"llm-client-go/retry"
 )
 
 // ─── 테스트 헬퍼 ──────────────────────────────────────────────
@@ -83,8 +84,9 @@ func TestNew_WithTimeout(t *testing.T) {
 	defer slowSrv.Close()
 
 	client := ollama.New(ollama.Config{
-		BaseURL: slowSrv.URL,
-		Timeout: 50 * time.Millisecond,
+		BaseURL:     slowSrv.URL,
+		Timeout:     50 * time.Millisecond,
+		RetryPolicy: &retry.Policy{},
 	})
 	_, err := client.Complete(context.Background(), llm.ChatRequest{
 		Model:    "llama3",

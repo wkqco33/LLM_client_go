@@ -2,11 +2,10 @@ package azure
 
 import (
 	"context"
-	"encoding/json"
-	"io"
 	"net/http"
 
 	llm "llm-client-go"
+	"llm-client-go/internal/transport"
 )
 
 // ChatService provides access to the Azure OpenAI Chat Completions endpoint.
@@ -24,20 +23,5 @@ func (s *ChatService) Complete(ctx context.Context, req llm.ChatRequest) (*llm.C
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, parseErrorResponse(resp)
-	}
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
-	}
-
-	var result llm.ChatResponse
-	if err := json.Unmarshal(body, &result); err != nil {
-		return nil, err
-	}
-	return &result, nil
+	return transport.DecodeJSON[llm.ChatResponse]("azure", resp, parseErrorResponse)
 }

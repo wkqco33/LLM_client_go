@@ -11,7 +11,6 @@ import (
 	"github.com/slack-go/slack"
 	"github.com/slack-go/slack/slackevents"
 	"github.com/slack-go/slack/socketmode"
-	llm "llm-client-go"
 	"llm-client-go/bots"
 )
 
@@ -97,7 +96,7 @@ func New(cfg Config) (*Bot, error) {
 
 // Start connects via Socket Mode and processes events until ctx is cancelled.
 func (b *Bot) Start(ctx context.Context) error {
-	b.log.Println("Slack bot started (Socket Mode)")
+	b.log.Println("[INFO] slack: bot started (Socket Mode)")
 
 	go func() {
 		<-ctx.Done()
@@ -110,7 +109,7 @@ func (b *Bot) Start(ctx context.Context) error {
 
 // Stop disconnects the Socket Mode client.
 func (b *Bot) Stop() error {
-	b.log.Println("Slack bot stopping")
+	b.log.Println("[INFO] slack: bot stopping")
 	return nil
 }
 
@@ -165,30 +164,26 @@ func (b *Bot) handleMessage(ctx context.Context, userID, channelID, text string)
 		return
 	}
 
-	if strings.EqualFold(text, resetCommand) {
-		b.sessions.Reset(userID)
-		b.send(channelID, "✅ Conversation reset.")
-		return
-	}
-
-	b.sessions.Append(userID, llm.Message{Role: llm.RoleUser, Content: text})
-	history := b.sessions.GetHistory(userID)
-
-	reply, err := b.backend.Complete(ctx, history)
+	reply, _, err := bots.HandleTurn(ctx, b.sessions, b.backend, userID, text, resetCommand)
 	if err != nil {
-		b.log.Printf("slack: backend error: %v", err)
+		b.log.Printf("[ERROR] slack: backend error: %v", err)
 		b.send(channelID, "⚠️ Error getting response. Please try again.")
 		return
 	}
-
-	b.sessions.Append(userID, llm.Message{Role: llm.RoleAssistant, Content: reply})
 	b.send(channelID, reply)
 }
 
+// slackMaxMessageLen is a conservative chunk size for Slack messages. Slack
+// has no small hard limit like Discord/Telegram, but very long single
+// messages are still worth splitting for readability and to stay well under
+// its block/text size limits.
+const slackMaxMessageLen = 4000
+
 func (b *Bot) send(channelID, text string) {
-	_, _, err := b.api.PostMessage(channelID, slack.MsgOptionText(text, false))
-	if err != nil {
-		b.log.Printf("slack: post message: %v", err)
+	for _, chunk := range bots.SplitMessage(text, slackMaxMessageLen) {
+		if _, _, err := b.api.PostMessage(channelID, slack.MsgOptionText(chunk, false)); err != nil {
+			b.log.Printf("[ERROR] slack: post message: %v", err)
+		}
 	}
 }
 

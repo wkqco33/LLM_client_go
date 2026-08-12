@@ -13,17 +13,24 @@ import (
 
 	llm "llm-client-go"
 	"llm-client-go/azure"
+	"llm-client-go/retry"
 )
 
 // ─── 테스트 헬퍼 ──────────────────────────────────────────────
+
+// noRetry disables the client's default retry policy so tests that hit
+// retryable status codes or timeouts fail on the first attempt instead of
+// waiting through several backoff cycles.
+var noRetry = &retry.Policy{}
 
 func testServer(t *testing.T, handler http.HandlerFunc) (*azure.Client, *httptest.Server) {
 	t.Helper()
 	srv := httptest.NewServer(handler)
 	t.Cleanup(srv.Close)
 	client := azure.New(azure.Config{
-		Endpoint: srv.URL,
-		APIKey:   "test-azure-key",
+		Endpoint:    srv.URL,
+		APIKey:      "test-azure-key",
+		RetryPolicy: noRetry,
 	})
 	return client, srv
 }
@@ -113,7 +120,7 @@ func TestNew_WithTimeout(t *testing.T) {
 	}))
 	defer slowSrv.Close()
 
-	client := azure.New(azure.Config{Endpoint: slowSrv.URL, APIKey: "key"},
+	client := azure.New(azure.Config{Endpoint: slowSrv.URL, APIKey: "key", RetryPolicy: noRetry},
 		azure.WithTimeout(50*time.Millisecond),
 	)
 	_, err := client.Complete(context.Background(), llm.ChatRequest{

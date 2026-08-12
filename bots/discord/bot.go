@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	"github.com/bwmarrin/discordgo"
-	llm "llm-client-go"
 	"llm-client-go/bots"
 )
 
@@ -20,6 +19,12 @@ type Bot struct {
 	backend  bots.Backend
 	sessions *bots.SessionManager
 	log      *log.Logger
+
+	// ctx is the context passed to Start, used so in-flight backend calls
+	// are cancelled on shutdown. It's set once before the session opens
+	// (and therefore before onMessage can fire), so no synchronization is
+	// needed to read it from the discordgo dispatch goroutines.
+	ctx context.Context
 }
 
 // Config holds configuration for the Discord bot.
@@ -77,10 +82,11 @@ func New(cfg Config) (*Bot, error) {
 // Start connects to Discord and begins processing messages.
 // It blocks until ctx is cancelled.
 func (b *Bot) Start(ctx context.Context) error {
+	b.ctx = ctx
 	if err := b.session.Open(); err != nil {
 		return fmt.Errorf("discord: open connection: %w", err)
 	}
-	b.log.Println("Discord bot started")
+	b.log.Println("[INFO] discord: bot started")
 
 	<-ctx.Done()
 	return b.Stop()
@@ -88,7 +94,7 @@ func (b *Bot) Start(ctx context.Context) error {
 
 // Stop disconnects from Discord.
 func (b *Bot) Stop() error {
-	b.log.Println("Discord bot stopping")
+	b.log.Println("[INFO] discord: bot stopping")
 	return b.session.Close()
 }
 
@@ -101,46 +107,21 @@ func (b *Bot) onMessage(s *discordgo.Session, m *discordgo.MessageCreate) {
 	userID := m.Author.ID
 	text := strings.TrimSpace(m.Content)
 
-	if strings.EqualFold(text, resetCommand) {
-		b.sessions.Reset(userID)
-		s.ChannelMessageSend(m.ChannelID, "✅ Conversation reset.")
-		return
-	}
-
-	// Append the user message and fetch full history.
-	b.sessions.Append(userID, llm.Message{Role: llm.RoleUser, Content: text})
-	history := b.sessions.GetHistory(userID)
-
-	reply, err := b.backend.Complete(context.Background(), history)
+	reply, wasReset, err := bots.HandleTurn(b.ctx, b.sessions, b.backend, userID, text, resetCommand)
 	if err != nil {
-		b.log.Printf("discord: backend error: %v", err)
+		b.log.Printf("[ERROR] discord: backend error: %v", err)
 		s.ChannelMessageSend(m.ChannelID, "⚠️ Error getting response. Please try again.")
 		return
 	}
-
-	// Append the assistant reply to the session.
-	b.sessions.Append(userID, llm.Message{Role: llm.RoleAssistant, Content: reply})
+	if wasReset {
+		s.ChannelMessageSend(m.ChannelID, reply)
+		return
+	}
 
 	// Discord has a 2000-char message limit; split if necessary.
-	for _, chunk := range splitMessage(reply, 2000) {
+	for _, chunk := range bots.SplitMessage(reply, 2000) {
 		if _, err := s.ChannelMessageSend(m.ChannelID, chunk); err != nil {
-			b.log.Printf("discord: send message: %v", err)
+			b.log.Printf("[ERROR] discord: send message: %v", err)
 		}
 	}
-}
-
-// splitMessage splits a long message into chunks of at most maxLen characters.
-func splitMessage(text string, maxLen int) []string {
-	if len(text) <= maxLen {
-		return []string{text}
-	}
-	var chunks []string
-	for len(text) > maxLen {
-		chunks = append(chunks, text[:maxLen])
-		text = text[maxLen:]
-	}
-	if text != "" {
-		chunks = append(chunks, text)
-	}
-	return chunks
 }

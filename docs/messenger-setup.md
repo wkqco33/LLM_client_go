@@ -17,19 +17,28 @@ Discord, Telegram, Slack 봇을 설정하고 LLM 클라이언트와 연결하는
 
 ## 공통 준비 사항
 
-### 1. LLM API 키 발급
+### 1. LLM 백엔드 준비
+
+예제들은 기본적으로 **Ollama**(로컬 실행, API 키 불필요)를 사용합니다. OpenAI나 Azure OpenAI를 쓰려면 `BACKEND` 환경변수로 전환하세요.
+
+#### **Ollama 사용 시 (기본값)**
+
+1. [ollama.com](https://ollama.com)에서 설치 후 `ollama serve`로 서버 실행
+2. 사용할 모델을 미리 받아둡니다: `ollama pull llama3.2`
+3. 별도 API 키가 필요 없습니다. 기본 주소는 `http://localhost:11434/v1`이며, 필요 시 `OLLAMA_BASE_URL`로 변경합니다.
 
 #### **OpenAI 사용 시**
 
 1. [platform.openai.com](https://platform.openai.com) 로그인
 2. **API keys** → **Create new secret key**
-3. 생성된 키를 `OPENAI_API_KEY` 환경변수에 설정
+3. 생성된 키를 `OPENAI_API_KEY` 환경변수에 설정하고 `BACKEND=openai`로 실행
 
 #### **Azure OpenAI 사용 시**
 
 1. [Azure Portal](https://portal.azure.com) → **Azure OpenAI** 리소스 생성
 2. **Keys and Endpoint** 탭에서 키와 엔드포인트 확인
 3. **Model deployments** 탭에서 배포 이름 확인
+4. `BACKEND=azure`로 실행
 
 ### 2. 예제 실행 준비
 
@@ -66,7 +75,8 @@ go mod download
 
 ```bash
 export DISCORD_BOT_TOKEN="your-bot-token"
-export OPENAI_API_KEY="your-openai-key"
+# Ollama가 기본 백엔드입니다 (로컬에서 `ollama serve` 실행 중이어야 함).
+# OpenAI를 쓰려면: export BACKEND=openai OPENAI_API_KEY="your-openai-key"
 
 go run examples/discord_bot/main.go
 ```
@@ -106,7 +116,8 @@ reset - 대화 기록을 초기화합니다
 
 ```bash
 export TELEGRAM_BOT_TOKEN="123456789:ABCdefGHIjklMNOpqrSTUvwxyz"
-export OPENAI_API_KEY="your-openai-key"
+# Ollama가 기본 백엔드입니다 (로컬에서 `ollama serve` 실행 중이어야 함).
+# OpenAI를 쓰려면: export BACKEND=openai OPENAI_API_KEY="your-openai-key"
 
 go run examples/telegram_bot/main.go
 ```
@@ -166,7 +177,8 @@ Slack 봇은 **Socket Mode**를 사용하므로 공개 서버 없이도 로컬�
 ```bash
 export SLACK_BOT_TOKEN="xoxb-your-bot-token"
 export SLACK_APP_TOKEN="xapp-your-app-token"
-export OPENAI_API_KEY="your-openai-key"
+# Ollama가 기본 백엔드입니다 (로컬에서 `ollama serve` 실행 중이어야 함).
+# OpenAI를 쓰려면: export BACKEND=openai OPENAI_API_KEY="your-openai-key"
 
 go run examples/slack_bot/main.go
 ```
@@ -187,12 +199,14 @@ go run examples/slack_bot/main.go
 
 | 변수명 | 설명 | 필수 |
 | - | - | - |
-| `OPENAI_API_KEY` | OpenAI API 키 | OpenAI 사용 시 |
+| `BACKEND` | LLM 백엔드 (`ollama` 기본값, 또는 `openai` / `azure`) | 선택 |
+| `OLLAMA_BASE_URL` | Ollama 서버 주소 (기본값: `http://localhost:11434/v1`) | 선택 |
+| `OLLAMA_MODEL` | 사용할 모델 (기본값: `llama3.2`) | 선택 |
+| `OPENAI_API_KEY` | OpenAI API 키 | `BACKEND=openai` 사용 시 |
 | `OPENAI_MODEL` | 사용할 모델 (기본값: `gpt-4o`) | 선택 |
-| `AZURE_OPENAI_ENDPOINT` | Azure OpenAI 엔드포인트 URL | Azure 사용 시 |
-| `AZURE_OPENAI_API_KEY` | Azure OpenAI API 키 | Azure 사용 시 |
-| `AZURE_OPENAI_DEPLOYMENT` | Azure 배포 이름 | Azure 사용 시 |
-| `BACKEND` | LLM 백엔드 (`azure` 또는 기본값 openai) | 선택 |
+| `AZURE_OPENAI_ENDPOINT` | Azure OpenAI 엔드포인트 URL | `BACKEND=azure` 사용 시 |
+| `AZURE_OPENAI_API_KEY` | Azure OpenAI API 키 | `BACKEND=azure` 사용 시 |
+| `AZURE_OPENAI_DEPLOYMENT` | Azure 배포 이름 | `BACKEND=azure` 사용 시 |
 | `DISCORD_BOT_TOKEN` | Discord 봇 토큰 | Discord 사용 시 |
 | `TELEGRAM_BOT_TOKEN` | Telegram 봇 토큰 | Telegram 사용 시 |
 | `SLACK_BOT_TOKEN` | Slack 봇 OAuth 토큰 (`xoxb-`) | Slack 사용 시 |
@@ -201,9 +215,14 @@ go run examples/slack_bot/main.go
 ### `.env` 파일 예시
 
 ```bash
-# LLM Backend
-OPENAI_API_KEY=sk-...
-OPENAI_MODEL=gpt-4o
+# LLM Backend (기본값: ollama, 로컬 실행, API 키 불필요)
+OLLAMA_BASE_URL=http://localhost:11434/v1
+OLLAMA_MODEL=llama3.2
+
+# OpenAI를 쓰려면 BACKEND=openai로 설정
+# BACKEND=openai
+# OPENAI_API_KEY=sk-...
+# OPENAI_MODEL=gpt-4o
 
 # Discord
 DISCORD_BOT_TOKEN=MTI...
@@ -241,7 +260,7 @@ import (
 )
 
 func main() {
-    backend := bots.NewOpenAIBackend(os.Getenv("OPENAI_API_KEY"), "gpt-4o")
+    backend := bots.NewOllamaBackend(os.Getenv("OLLAMA_BASE_URL"), "llama3.2")
     sessions := bots.NewSessionManager(bots.WithSystemPrompt("You are helpful."))
 
     discord, _ := discordbot.New(discordbot.Config{
@@ -272,10 +291,15 @@ func main() {
 
 ## LLM 백엔드 전환
 
-모든 예제는 `BACKEND` 환경변수로 OpenAI ↔ Azure를 전환할 수 있습니다.
+모든 예제는 `BACKEND` 환경변수로 Ollama ↔ OpenAI ↔ Azure를 전환할 수 있습니다.
 
 ```bash
-# OpenAI 사용 (기본값)
+# Ollama 사용 (기본값, 로컬에서 `ollama serve` 실행 중이어야 함)
+go run examples/discord_bot/main.go
+
+# OpenAI 사용
+BACKEND=openai \
+OPENAI_API_KEY=sk-... \
 go run examples/discord_bot/main.go
 
 # Azure OpenAI 사용
@@ -289,6 +313,9 @@ go run examples/discord_bot/main.go
 코드에서 직접 지정할 수도 있습니다.
 
 ```go
+// Ollama (로컬, API 키 불필요)
+backend := bots.NewOllamaBackend(os.Getenv("OLLAMA_BASE_URL"), "llama3.2")
+
 // OpenAI
 backend := bots.NewOpenAIBackend(apiKey, "gpt-4o")
 

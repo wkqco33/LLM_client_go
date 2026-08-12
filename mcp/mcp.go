@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"os/exec"
 	"sync"
@@ -58,9 +59,26 @@ func NewHttpClient(baseURL string) *HttpClient {
 	}
 }
 
+// IsAlive performs a bounded-time GET against the tools endpoint to check
+// whether the MCP HTTP server is reachable. It uses its own short timeout
+// independent of the client's configured request timeout, so a hung server
+// doesn't block callers gating on liveness.
 func (c *HttpClient) IsAlive() bool {
-	// Simple HTTP check could be added here
-	return true
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/tools", nil)
+	if err != nil {
+		return false
+	}
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return false
+	}
+	defer resp.Body.Close()
+
+	return resp.StatusCode < http.StatusInternalServerError
 }
 
 func (c *HttpClient) ListTools(ctx context.Context) ([]Tool, error) {
@@ -75,7 +93,7 @@ func (c *HttpClient) ListTools(ctx context.Context) ([]Tool, error) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("mcp http: status %d", resp.StatusCode)
+		return nil, fmt.Errorf("mcp http: %w (status %d)", ErrUnexpectedStatus, resp.StatusCode)
 	}
 
 	var result struct {
@@ -104,6 +122,10 @@ func (c *HttpClient) CallTool(ctx context.Context, name string, arguments map[st
 	}
 	defer resp.Body.Close()
 
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("mcp http: %w (status %d)", ErrUnexpectedStatus, resp.StatusCode)
+	}
+
 	var result CallToolResponse
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		return nil, err
@@ -120,12 +142,20 @@ type StdioConfig struct {
 	// Timeout is the maximum time to wait for a response from the MCP server.
 	// Defaults to 30 seconds.
 	Timeout time.Duration
+
+	// Logger receives diagnostic messages: lines from the server that
+	// couldn't be parsed as JSON-RPC, and why the read loop stopped.
+	// StdioClient is silent by default (nil Logger), matching the rest of
+	// this module — set one to make otherwise-invisible transport problems
+	// debuggable.
+	Logger *log.Logger
 }
 
 type StdioClient struct {
 	cmd    *exec.Cmd
 	stdin  io.WriteCloser
 	stdout *bufio.Scanner
+	logger *log.Logger
 
 	timeout  time.Duration
 	mu       sync.Mutex
@@ -168,6 +198,11 @@ func NewStdioClientWithConfig(cfg StdioConfig, command string, args ...string) (
 		timeout = defaultStdioTimeout
 	}
 
+	logger := cfg.Logger
+	if logger == nil {
+		logger = log.New(io.Discard, "", 0)
+	}
+
 	cmd := exec.Command(command, args...)
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
@@ -186,6 +221,7 @@ func NewStdioClientWithConfig(cfg StdioConfig, command string, args ...string) (
 		cmd:     cmd,
 		stdin:   stdin,
 		stdout:  bufio.NewScanner(stdout),
+		logger:  logger,
 		timeout: timeout,
 		pending: make(map[int]chan jsonRPCResponse),
 	}
@@ -202,8 +238,10 @@ func (c *StdioClient) IsAlive() bool {
 
 func (c *StdioClient) readLoop() {
 	for c.stdout.Scan() {
+		line := c.stdout.Bytes()
 		var resp jsonRPCResponse
-		if err := json.Unmarshal(c.stdout.Bytes(), &resp); err != nil {
+		if err := json.Unmarshal(line, &resp); err != nil {
+			c.logger.Printf("mcp stdio: discarding unparseable line: %v (%q)", err, line)
 			continue
 		}
 
@@ -216,6 +254,11 @@ func (c *StdioClient) readLoop() {
 		if ok {
 			ch <- resp
 		}
+	}
+	if err := c.stdout.Err(); err != nil {
+		c.logger.Printf("mcp stdio: read loop stopped: %v", err)
+	} else {
+		c.logger.Printf("mcp stdio: server closed its stdout, treating connection as dead")
 	}
 
 	c.mu.Lock()
@@ -230,7 +273,7 @@ func (c *StdioClient) readLoop() {
 
 func (c *StdioClient) call(ctx context.Context, method string, params any) (json.RawMessage, error) {
 	if !c.IsAlive() {
-		return nil, fmt.Errorf("mcp stdio: server process is not running")
+		return nil, fmt.Errorf("mcp stdio: %w", ErrServerUnreachable)
 	}
 
 	c.mu.Lock()
@@ -271,7 +314,7 @@ func (c *StdioClient) call(ctx context.Context, method string, params any) (json
 		c.mu.Lock()
 		delete(c.pending, id)
 		c.mu.Unlock()
-		return nil, fmt.Errorf("mcp stdio: request timeout")
+		return nil, fmt.Errorf("mcp stdio: %w", ErrRequestTimeout)
 	}
 }
 

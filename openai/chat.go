@@ -2,11 +2,10 @@ package openai
 
 import (
 	"context"
-	"encoding/json"
-	"fmt"
 	"net/http"
 
 	llm "llm-client-go"
+	"llm-client-go/internal/transport"
 )
 
 // ChatService provides access to the Chat Completions endpoint.
@@ -22,15 +21,5 @@ func (s *ChatService) Complete(ctx context.Context, req llm.ChatRequest) (*llm.C
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, parseErrorResponse(resp)
-	}
-
-	var result llm.ChatResponse
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return nil, fmt.Errorf("openai: decode response: %w", err)
-	}
-	return &result, nil
+	return transport.DecodeJSON[llm.ChatResponse]("openai", resp, parseErrorResponse)
 }

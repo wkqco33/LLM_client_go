@@ -2,10 +2,17 @@ package agent
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"sync"
 
 	llm "llm-client-go"
 )
+
+// ErrMaxTurnsExceeded is returned by Run when the tool-calling loop reaches
+// its configured turn limit (see WithMaxTurns) without the model producing a
+// final, non-tool-call response.
+var ErrMaxTurnsExceeded = errors.New("agent: max turns exceeded")
 
 // ExecutableTool represents a tool that can be executed locally.
 // It provides both the schema definition for the LLM and the execution logic.
@@ -106,11 +113,11 @@ func (r *Runner) Run(ctx context.Context, userMessages []llm.Message) ([]llm.Mes
 
 		resp, err := r.client.Complete(ctx, req)
 		if err != nil {
-			return messages, nil, fmt.Errorf("agent run complete: %w", err)
+			return messages, nil, fmt.Errorf("agent: complete: %w", err)
 		}
 
 		if len(resp.Choices) == 0 {
-			return messages, resp, fmt.Errorf("agent run: empty choices in response")
+			return messages, resp, fmt.Errorf("agent: empty choices in response")
 		}
 
 		assistantMsg := resp.Choices[0].Message
@@ -121,31 +128,51 @@ func (r *Runner) Run(ctx context.Context, userMessages []llm.Message) ([]llm.Mes
 			return messages, resp, nil
 		}
 
-		// Execute all requested tool calls
-		for _, tc := range assistantMsg.ToolCalls {
-			tool, ok := r.tools[tc.Function.Name]
-			if !ok {
-				errMsg := fmt.Sprintf("Error: tool %q not found", tc.Function.Name)
-				messages = append(messages, llm.Message{
-					Role:       llm.RoleTool,
-					Content:    errMsg,
-					ToolCallID: tc.ID,
-				})
-				continue
-			}
+		// Execute all requested tool calls in parallel — the model can ask
+		// for several independent tools in one turn (e.g. weather + search),
+		// and there's no reason to pay their latency sequentially. Each
+		// goroutine writes only to its own slice index, so results land in
+		// results[i] regardless of completion order; they're appended to
+		// messages in the original tool_calls order afterward.
+		results := make([]llm.Message, len(assistantMsg.ToolCalls))
+		var wg sync.WaitGroup
+		for i, tc := range assistantMsg.ToolCalls {
+			wg.Add(1)
+			go func(i int, tc llm.ToolCall) {
+				defer wg.Done()
+				results[i] = r.executeToolCall(ctx, tc)
+			}(i, tc)
+		}
+		wg.Wait()
+		messages = append(messages, results...)
+	}
 
-			result, err := tool.Execute(ctx, tc.Function.Arguments)
-			if err != nil {
-				result = fmt.Sprintf("Error executing tool: %v", err)
-			}
+	return messages, nil, fmt.Errorf("%w: reached %d turns without a final response", ErrMaxTurnsExceeded, r.maxTurn)
+}
 
-			messages = append(messages, llm.Message{
-				Role:       llm.RoleTool,
-				Content:    result,
-				ToolCallID: tc.ID,
-			})
+// executeToolCall runs a single tool call and turns the outcome (including a
+// missing tool or an execution error) into a RoleTool message. Errors are
+// never returned to the caller here — they're surfaced to the model as
+// message content so it has a chance to react (retry, apologize, try a
+// different tool) instead of aborting the whole run.
+func (r *Runner) executeToolCall(ctx context.Context, tc llm.ToolCall) llm.Message {
+	tool, ok := r.tools[tc.Function.Name]
+	if !ok {
+		return llm.Message{
+			Role:       llm.RoleTool,
+			Content:    fmt.Sprintf("Error: tool %q not found", tc.Function.Name),
+			ToolCallID: tc.ID,
 		}
 	}
 
-	return messages, nil, fmt.Errorf("agent run: max turns (%d) reached without finishing", r.maxTurn)
+	result, err := tool.Execute(ctx, tc.Function.Arguments)
+	if err != nil {
+		result = fmt.Sprintf("Error executing tool: %v", err)
+	}
+
+	return llm.Message{
+		Role:       llm.RoleTool,
+		Content:    result,
+		ToolCallID: tc.ID,
+	}
 }

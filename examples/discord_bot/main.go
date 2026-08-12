@@ -17,7 +17,9 @@ func main() {
 		log.Fatalf("failed to load .env: %v", err)
 	}
 
-	// Configure backend: set BACKEND=azure to use Azure OpenAI
+	// Configure backend: set BACKEND=openai or BACKEND=azure to use a hosted
+	// provider. Defaults to Ollama (local, no API key required) so this
+	// example works out of the box.
 	var backend bots.Backend
 	switch os.Getenv("BACKEND") {
 	case "azure":
@@ -26,10 +28,15 @@ func main() {
 			os.Getenv("AZURE_OPENAI_API_KEY"),
 			os.Getenv("AZURE_OPENAI_DEPLOYMENT"),
 		)
-	default:
+	case "openai":
 		backend = bots.NewOpenAIBackend(
 			os.Getenv("OPENAI_API_KEY"),
 			getEnvOrDefault("OPENAI_MODEL", "gpt-4o"),
+		)
+	default:
+		backend = bots.NewOllamaBackend(
+			os.Getenv("OLLAMA_BASE_URL"),
+			getEnvOrDefault("OLLAMA_MODEL", "llama3.2"),
 		)
 	}
 

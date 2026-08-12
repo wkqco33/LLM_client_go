@@ -1,22 +1,18 @@
 package openai
 
 import (
-	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"strings"
 
 	llm "llm-client-go"
+	"llm-client-go/internal/sse"
 )
 
 // Stream reads a server-sent event (SSE) stream from the Chat Completions API.
 type Stream struct {
-	resp    *http.Response
-	scanner *bufio.Scanner
-	done    chan struct{}
-	closed  bool
+	conn *sse.Conn
 }
 
 // Stream starts a streaming chat completion request.
@@ -33,64 +29,33 @@ func (s *ChatService) Stream(ctx context.Context, req llm.ChatRequest) (llm.Stre
 		return nil, parseErrorResponse(resp)
 	}
 
-	st := &Stream{
-		resp:    resp,
-		scanner: bufio.NewScanner(resp.Body),
-		done:    make(chan struct{}),
-	}
-	go func() {
-		select {
-		case <-ctx.Done():
-			st.Close()
-		case <-st.done:
-		}
-	}()
-	return st, nil
+	return &Stream{conn: sse.New(ctx, resp)}, nil
 }
 
 // Next reads the next chunk from the stream.
-// Returns (nil, io.EOF) when the stream is complete.
+// Returns (nil, nil) when the stream is complete.
 // Returns (nil, llm.ErrStreamClosed) if the stream has already been closed.
 func (s *Stream) Next() (*llm.ChatStreamChunk, error) {
-	if s.closed {
+	if s.conn.Closed() {
 		return nil, llm.ErrStreamClosed
 	}
 
-	for s.scanner.Scan() {
-		line := s.scanner.Text()
-
-		// SSE lines start with "data: "
-		if !strings.HasPrefix(line, "data: ") {
-			continue
-		}
-
-		data := strings.TrimPrefix(line, "data: ")
-
-		// The stream ends with the sentinel value.
-		if data == "[DONE]" {
-			return nil, nil
-		}
-
-		var chunk llm.ChatStreamChunk
-		if err := json.Unmarshal([]byte(data), &chunk); err != nil {
-			return nil, fmt.Errorf("openai: parse stream chunk: %w", err)
-		}
-		return &chunk, nil
-	}
-
-	if err := s.scanner.Err(); err != nil {
+	data, ok, err := s.conn.Next()
+	if err != nil {
 		return nil, fmt.Errorf("openai: read stream: %w", err)
 	}
+	if !ok || data == "[DONE]" {
+		return nil, nil
+	}
 
-	return nil, nil
+	var chunk llm.ChatStreamChunk
+	if err := json.Unmarshal([]byte(data), &chunk); err != nil {
+		return nil, fmt.Errorf("openai: parse stream chunk: %w", err)
+	}
+	return &chunk, nil
 }
 
 // Close releases resources held by the stream.
 func (s *Stream) Close() error {
-	if s.closed {
-		return nil
-	}
-	s.closed = true
-	close(s.done)
-	return s.resp.Body.Close()
+	return s.conn.Close()
 }

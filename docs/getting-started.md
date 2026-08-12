@@ -31,14 +31,14 @@ go mod tidy
 
 ## 2. 통합 클라이언트 사용하기
 
-모든 프로바이더(OpenAI, Azure, Anthropic)는 `llm.Client` 인터페이스를 구현하므로 동일한 코드로 여러 모델을 교체하며 사용할 수 있습니다.
+모든 프로바이더(OpenAI, Azure, Ollama)는 `llm.Client` 인터페이스를 구현하므로 동일한 코드로 여러 모델을 교체하며 사용할 수 있습니다.
 
 ### 클라이언트 생성
 
 ```go
 import (
     "llm-client-go/openai"
-    "llm-client-go/anthropic"
+    "llm-client-go/ollama"
     "llm-client-go/retry"
 )
 
@@ -48,9 +48,10 @@ client := openai.New(openai.Config{
     RetryPolicy: &retry.DefaultPolicy,
 })
 
-// Anthropic(Claude) 생성
-anthroClient := anthropic.New(anthropic.Config{
-    APIKey: os.Getenv("ANTHROPIC_API_KEY"),
+// Ollama 생성 (로컬 실행, API 키 불필요)
+// ollama.New는 OpenAI 호환 API를 그대로 감싼 *openai.Client를 반환합니다.
+ollamaClient := ollama.New(ollama.Config{
+    BaseURL: "http://localhost:11434/v1", // 생략 시 기본값
 })
 ```
 
@@ -59,10 +60,10 @@ anthroClient := anthropic.New(anthropic.Config{
 ```go
 import llm "llm-client-go"
 
-var myClient llm.Client = client // 또는 anthroClient
+var myClient llm.Client = client // 또는 ollamaClient
 
 resp, err := myClient.Complete(ctx, llm.ChatRequest{
-    Model: "gpt-4o", // 또는 "claude-3-5-sonnet-20240620"
+    Model: "gpt-4o", // 또는 Ollama 사용 시 "llama3.2" 등
     Messages: []llm.Message{
         {Role: llm.RoleUser, Content: "Hello!"},
     },

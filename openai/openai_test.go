@@ -12,16 +12,22 @@ import (
 
 	llm "llm-client-go"
 	"llm-client-go/openai"
+	"llm-client-go/retry"
 )
 
 // ─── 테스트 헬퍼 ──────────────────────────────────────────────
+
+// noRetry disables the client's default retry policy so tests that hit
+// retryable status codes or timeouts fail on the first attempt instead of
+// waiting through several backoff cycles.
+var noRetry = &retry.Policy{}
 
 // testServer starts a mock HTTP server and returns an OpenAI client pointed at it.
 func testServer(t *testing.T, handler http.HandlerFunc) (*openai.Client, *httptest.Server) {
 	t.Helper()
 	srv := httptest.NewServer(handler)
 	t.Cleanup(srv.Close)
-	return openai.New(openai.Config{APIKey: "test-key", BaseURL: srv.URL}), srv
+	return openai.New(openai.Config{APIKey: "test-key", BaseURL: srv.URL, RetryPolicy: noRetry}), srv
 }
 
 func ptr[T any](v T) *T { return &v }
@@ -67,7 +73,7 @@ func TestNew_WithTimeout_Option(t *testing.T) {
 	}))
 	t.Cleanup(slowSrv.Close)
 
-	c := openai.New(openai.Config{APIKey: "key", BaseURL: slowSrv.URL},
+	c := openai.New(openai.Config{APIKey: "key", BaseURL: slowSrv.URL, RetryPolicy: noRetry},
 		openai.WithTimeout(50*time.Millisecond),
 	)
 	_, err := c.Complete(context.Background(), llm.ChatRequest{

@@ -1,13 +1,13 @@
 # LLM Client Go
 
 Go로 구현된 통합 LLM 클라이언트 및 에이전트 프레임워크입니다.  
-OpenAI, Azure OpenAI, Anthropic Claude를 하나의 인터페이스로 다루며, **MCP(Model Context Protocol)** 연동과 자동 도구 실행 에이전트를 지원합니다.
+OpenAI, Azure OpenAI, Ollama(로컬)를 하나의 인터페이스로 다루며, **MCP(Model Context Protocol)** 연동과 자동 도구 실행 에이전트를 지원합니다.
 
 ## 핵심 특징
 
 | 기능 | 설명 |
 | - | - |
-| **통합 인터페이스** | `llm.Client` 하나로 OpenAI, Azure, Anthropic Claude 모델 제어 |
+| **통합 인터페이스** | `llm.Client` 하나로 OpenAI, Azure, Ollama(로컬) 모델 제어 |
 | **자동화 에이전트** | `agent.Runner`를 통한 도구(Function) 호출 루프 자동화 |
 | **MCP 연동** | HTTP 및 Stdio(JSON-RPC) 전송 방식을 통한 MCP 서버 도구 연결 |
 | **안정성 (Retry)** | 지수 백오프 및 Jitter가 적용된 자동 재시도 미들웨어 내장 |
@@ -28,7 +28,7 @@ llm-client-go/
 ├── token/                    # 토큰 계산기 유틸리티
 ├── openai/                   # OpenAI 프로바이더 구현
 ├── azure/                    # Azure OpenAI 프로바이더 구현
-├── anthropic/                # Anthropic Claude 프로바이더 구현
+├── ollama/                   # Ollama 프로바이더 구현 (OpenAI 호환, 로컬 실행)
 ├── bots/                     # 메신저 봇 어댑터 (Discord, Telegram, Slack)
 └── examples/                 # 다양한 사용 사례 예제 코드
 ```
@@ -40,7 +40,7 @@ llm-client-go/
 어떤 프로바이더든 `llm.Client` 인터페이스를 구현하므로 동일한 방식으로 요청을 보낼 수 있습니다.
 
 ```go
-// OpenAI, Azure, Anthropic 중 선택
+// OpenAI, Azure, Ollama(로컬) 중 선택
 var client llm.Client = openai.New(openai.Config{
     APIKey: os.Getenv("OPENAI_API_KEY"),
     RetryPolicy: &retry.DefaultPolicy, // 자동 재시도 활성화
@@ -49,7 +49,7 @@ var client llm.Client = openai.New(openai.Config{
 resp, err := client.Complete(ctx, llm.ChatRequest{
     Model: "gpt-4o",
     Messages: []llm.Message{
-        {Role: llm.RoleUser, Content: "Hello Claude/GPT!"},
+        {Role: llm.RoleUser, Content: "Hello!"},
     },
 })
 ```
@@ -106,8 +106,8 @@ policy := retry.Policy{
     MaxRetries: 5,
     MinWait:    2 * time.Second,
 }
-client := anthropic.New(anthropic.Config{
-    APIKey: "...",
+client := openai.New(openai.Config{
+    APIKey:      "...",
     RetryPolicy: &policy,
 })
 ```
@@ -143,6 +143,6 @@ msgTokens := token.DefaultCounter.CountMessages(history)
 상세한 사용법은 `examples/` 디렉토리를 참고하세요.
 
 - [에이전트 및 MCP 연동](examples/mcp_agent/main.go)
-- [Anthropic Claude 사용](examples/anthropic_chat/main.go)
+- [Ollama(로컬) 사용](examples/ollama_chat/main.go)
 - [OpenAI 도구 사용](examples/openai_tools/main.go)
 - [메신저 봇 설정](docs/messenger-setup.md)

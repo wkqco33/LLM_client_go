@@ -3,9 +3,11 @@ package bots
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	llm "llm-client-go"
 	"llm-client-go/azure"
+	"llm-client-go/ollama"
 	"llm-client-go/openai"
 )
 
@@ -37,6 +39,16 @@ func NewAzureBackend(endpoint, apiKey, deploymentName string, opts ...azure.Opti
 	}
 }
 
+// NewOllamaBackend creates an Ollama-backed Backend using the unified
+// interface. Ollama runs locally and requires no API key; baseURL may be
+// "" to use the default (http://localhost:11434/v1).
+func NewOllamaBackend(baseURL, model string, opts ...openai.Option) *CommonBackend {
+	return &CommonBackend{
+		Client: ollama.New(ollama.Config{BaseURL: baseURL}, opts...),
+		Model:  model,
+	}
+}
+
 // Complete implements Backend using the unified llm.Client interface.
 func (b *CommonBackend) Complete(ctx context.Context, messages []llm.Message) (string, error) {
 	resp, err := b.Client.Complete(ctx, llm.ChatRequest{
@@ -50,4 +62,35 @@ func (b *CommonBackend) Complete(ctx context.Context, messages []llm.Message) (s
 		return "", fmt.Errorf("backend: no choices in response")
 	}
 	return resp.Choices[0].Message.Content, nil
+}
+
+// HandleTurn processes one incoming user message against sessions/backend:
+// it detects the reset command, otherwise appends the user message, calls
+// the backend with the full history, and appends the assistant reply.
+//
+// Every platform adapter (Discord, Telegram, Slack) drove this same
+// sequence independently; it's centralized here so the behavior (including
+// which errors are returned to the caller to render) stays one
+// implementation instead of three near-identical copies.
+//
+// If the message is a reset command, wasReset is true and reply is the
+// confirmation text to send; err is always nil in that case. Otherwise,
+// reply is the assistant's response, or "" with a non-nil err if the
+// backend call failed (the caller decides how to render that failure).
+func HandleTurn(ctx context.Context, sessions *SessionManager, backend Backend, userID, text, resetCmd string) (reply string, wasReset bool, err error) {
+	if strings.EqualFold(text, resetCmd) {
+		sessions.Reset(userID)
+		return "✅ Conversation reset.", true, nil
+	}
+
+	sessions.Append(userID, llm.Message{Role: llm.RoleUser, Content: text})
+	history := sessions.GetHistory(userID)
+
+	reply, err = backend.Complete(ctx, history)
+	if err != nil {
+		return "", false, err
+	}
+
+	sessions.Append(userID, llm.Message{Role: llm.RoleAssistant, Content: reply})
+	return reply, false, nil
 }

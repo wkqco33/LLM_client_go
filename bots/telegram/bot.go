@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
-	llm "llm-client-go"
 	"llm-client-go/bots"
 )
 
@@ -75,7 +74,7 @@ func New(cfg Config) (*Bot, error) {
 
 // Start begins polling for updates and blocks until ctx is cancelled.
 func (b *Bot) Start(ctx context.Context) error {
-	b.log.Printf("Telegram bot started (@%s)", b.api.Self.UserName)
+	b.log.Printf("[INFO] telegram: bot started (@%s)", b.api.Self.UserName)
 
 	u := tgbotapi.NewUpdate(0)
 	u.Timeout = 60
@@ -90,7 +89,7 @@ func (b *Bot) Start(ctx context.Context) error {
 				return nil
 			}
 			if update.Message != nil {
-				go b.handleMessage(update.Message)
+				go b.handleMessage(ctx, update.Message)
 			}
 		}
 	}
@@ -98,12 +97,12 @@ func (b *Bot) Start(ctx context.Context) error {
 
 // Stop shuts down the bot.
 func (b *Bot) Stop() error {
-	b.log.Println("Telegram bot stopping")
+	b.log.Println("[INFO] telegram: bot stopping")
 	b.api.StopReceivingUpdates()
 	return nil
 }
 
-func (b *Bot) handleMessage(msg *tgbotapi.Message) {
+func (b *Bot) handleMessage(ctx context.Context, msg *tgbotapi.Message) {
 	userID := fmt.Sprintf("%d", msg.From.ID)
 	text := strings.TrimSpace(msg.Text)
 
@@ -111,40 +110,26 @@ func (b *Bot) handleMessage(msg *tgbotapi.Message) {
 		return
 	}
 
-	if strings.EqualFold(text, resetCommand) {
-		b.sessions.Reset(userID)
-		b.send(msg.Chat.ID, "✅ Conversation reset.")
-		return
-	}
-
-	b.sessions.Append(userID, llm.Message{Role: llm.RoleUser, Content: text})
-	history := b.sessions.GetHistory(userID)
-
-	reply, err := b.backend.Complete(context.Background(), history)
+	// reply already holds the right text whether this was a reset or a
+	// normal turn; only the error path needs distinct handling.
+	reply, _, err := bots.HandleTurn(ctx, b.sessions, b.backend, userID, text, resetCommand)
 	if err != nil {
-		b.log.Printf("telegram: backend error: %v", err)
+		b.log.Printf("[ERROR] telegram: backend error: %v", err)
 		b.send(msg.Chat.ID, "⚠️ Error getting response. Please try again.")
 		return
 	}
-
-	b.sessions.Append(userID, llm.Message{Role: llm.RoleAssistant, Content: reply})
 	b.send(msg.Chat.ID, reply)
 }
 
-func (b *Bot) send(chatID int64, text string) {
-	// Telegram message limit is 4096 characters.
-	const maxLen = 4096
-	for len(text) > 0 {
-		chunk := text
-		if len(chunk) > maxLen {
-			chunk = text[:maxLen]
-		}
-		text = text[len(chunk):]
+// Telegram message limit is 4096 characters.
+const telegramMaxMessageLen = 4096
 
+func (b *Bot) send(chatID int64, text string) {
+	for _, chunk := range bots.SplitMessage(text, telegramMaxMessageLen) {
 		msg := tgbotapi.NewMessage(chatID, chunk)
 		msg.ParseMode = tgbotapi.ModeMarkdown
 		if _, err := b.api.Send(msg); err != nil {
-			b.log.Printf("telegram: send message: %v", err)
+			b.log.Printf("[ERROR] telegram: send message: %v", err)
 		}
 	}
 }

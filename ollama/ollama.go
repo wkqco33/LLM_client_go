@@ -27,6 +27,7 @@ type Config struct {
 	Timeout time.Duration
 
 	// RetryPolicy configures automatic retries for failed requests.
+	// Defaults to retry.DefaultPolicy; pass &retry.Policy{} to disable retries.
 	RetryPolicy *retry.Policy
 }
 

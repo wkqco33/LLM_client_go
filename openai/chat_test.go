@@ -16,8 +16,9 @@ func newTestClient(t *testing.T, handler http.HandlerFunc) (*openai.Client, *htt
 	srv := httptest.NewServer(handler)
 	t.Cleanup(srv.Close)
 	client := openai.New(openai.Config{
-		APIKey:  "test-key",
-		BaseURL: srv.URL,
+		APIKey:      "test-key",
+		BaseURL:     srv.URL,
+		RetryPolicy: noRetry,
 	})
 	return client, srv
 }
