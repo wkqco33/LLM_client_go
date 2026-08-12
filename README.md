@@ -161,7 +161,12 @@ task fmt                # gofmt
 
 task run:ollama-chat   # Ollama 채팅 예제 실행
 task run:discord        # Discord 봇 실행 (기본 백엔드: Ollama, BACKEND=openai|azure로 전환)
+
+task --watch test       # 파일 변경 감지 시 자동 재실행 (TDD 루프)
 ```
+
+이 프로젝트는 **TDD**로 개발합니다 — 새 코드를 작성하기 전에 실패하는 테스트부터 작성하세요.
+워크플로우와 테스트 관례는 [AGENTS.md](AGENTS.md)를 참고하세요.
 
 ---
 

@@ -183,7 +183,10 @@ tasks:
   # ─── 테스트 ────────────────────────────────────────────────
 
   test:
-    desc: 전체 테스트 실행
+    desc: "전체 테스트 실행 (TDD 루프: task --watch test 로 변경 감지 시 자동 재실행)"
+    method: none # sources는 --watch 트리거 용도일 뿐, 매번 실제로 테스트를 실행해야 함 (실행 스킵 금지)
+    sources:
+      - "**/*.go"
     cmds:
       - go test ./...
 

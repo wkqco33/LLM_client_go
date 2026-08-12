@@ -98,7 +98,7 @@ func (rt *RoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
 
 		// Calculate backoff time
 		wait := rt.calculateBackoff(attempt, resp)
-		
+
 		select {
 		case <-time.After(wait):
 			// Proceed to the next attempt
@@ -134,7 +134,7 @@ func (rt *RoundTripper) calculateBackoff(attempt int, resp *http.Response) time.
 	// wait = min(MaxWait, MinWait * 2^attempt)
 	exp := math.Pow(2, float64(attempt))
 	wait := time.Duration(float64(rt.Policy.MinWait) * exp)
-	
+
 	if wait > rt.Policy.MaxWait {
 		wait = rt.Policy.MaxWait
 	}
