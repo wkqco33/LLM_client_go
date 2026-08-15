@@ -6,19 +6,20 @@
 
 ## 1. 모듈 의존성 추가
 
-`llm-client-go`는 URL 기반 경로 없이 `llm-client-go`라는 모듈 이름을 사용합니다.  
-사내 프로젝트나 로컬 개발 시에는 `replace` 디렉티브를 사용하여 경로를 지정합니다.
+Go 모듈 명령어로 최신 버전을 설치합니다.
 
-### go.mod 설정 (로컬 경로 기준)
+```bash
+go get github.com/wkqco33/LLM_client_go
+```
+
+`go.mod`에 자동으로 의존성이 추가됩니다:
 
 ```go
 module my-project
 
-go 1.22
+go 1.25
 
-require llm-client-go v0.0.0
-
-replace llm-client-go => ../LLM_client_go
+require github.com/wkqco33/LLM_client_go v0.1.0
 ```
 
 이후 의존성을 동기화합니다.
@@ -37,9 +38,9 @@ go mod tidy
 
 ```go
 import (
-    "llm-client-go/openai"
-    "llm-client-go/ollama"
-    "llm-client-go/retry"
+    "github.com/wkqco33/LLM_client_go/openai"
+    "github.com/wkqco33/LLM_client_go/ollama"
+    "github.com/wkqco33/LLM_client_go/retry"
 )
 
 // OpenAI 생성 (재시도 정책 포함)
@@ -58,7 +59,7 @@ ollamaClient := ollama.New(ollama.Config{
 ### 채팅 완성 (llm.Client 활용)
 
 ```go
-import llm "llm-client-go"
+import llm "github.com/wkqco33/LLM_client_go"
 
 var myClient llm.Client = client // 또는 ollamaClient
 
@@ -77,7 +78,7 @@ resp, err := myClient.Complete(ctx, llm.ChatRequest{
 `agent.Runner`를 사용하면 모델의 도구 호출(Tool Calling) 요청을 자동으로 처리할 수 있습니다.
 
 ```go
-import "llm-client-go/agent"
+import "github.com/wkqco33/LLM_client_go/agent"
 
 // 1. 에이전트 생성
 runner := agent.NewRunner(client, "gpt-4o", 
@@ -101,7 +102,7 @@ msgs, finalResp, err := runner.Run(ctx, userMessages)
 ### Stdio(JSON-RPC) 방식
 
 ```go
-import "llm-client-go/mcp"
+import "github.com/wkqco33/LLM_client_go/mcp"
 
 // 1. 로컬 MCP 서버 프로세스 실행 (stdio 방식)
 mcpProvider, _ := mcp.NewStdioClient("npx", "-y", "@modelcontextprotocol/server-filesystem", "/home/user/docs")
@@ -138,7 +139,7 @@ client := openai.New(openai.Config{..., RetryPolicy: &policy})
 전송 전 컨텍스트 크기를 미리 확인합니다.
 
 ```go
-import "llm-client-go/token"
+import "github.com/wkqco33/LLM_client_go/token"
 
 count := token.Estimate("텍스트 토큰 수 예측")
 msgCount := token.DefaultCounter.CountMessages(messages)

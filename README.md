@@ -1,7 +1,20 @@
 # LLM Client Go
 
+[![Go Reference](https://pkg.go.dev/badge/github.com/wkqco33/LLM_client_go.svg)](https://pkg.go.dev/github.com/wkqco33/LLM_client_go)
+[![CI](https://github.com/wkqco33/LLM_client_go/actions/workflows/ci.yml/badge.svg)](https://github.com/wkqco33/LLM_client_go/actions/workflows/ci.yml)
+[![Go Report Card](https://goreportcard.com/badge/github.com/wkqco33/LLM_client_go)](https://goreportcard.com/report/github.com/wkqco33/LLM_client_go)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
 Go로 구현된 통합 LLM 클라이언트 및 에이전트 프레임워크입니다.  
 OpenAI, Azure OpenAI, Ollama(로컬)를 하나의 인터페이스로 다루며, **MCP(Model Context Protocol)** 연동과 자동 도구 실행 에이전트를 지원합니다.
+
+[English README](README_EN.md)
+
+## 설치
+
+```bash
+go get github.com/wkqco33/LLM_client_go
+```
 
 ## 핵심 특징
 
@@ -20,7 +33,7 @@ OpenAI, Azure OpenAI, Ollama(로컬)를 하나의 인터페이스로 다루며, 
 ## 패키지 구조
 
 ```bash
-llm-client-go/
+LLM_client_go/
 ├── types.go                  # 공통 타입 및 llm.Client 인터페이스
 ├── agent/                    # 에이전트 자동화 루프 (Runner)
 ├── mcp/                      # MCP 클라이언트 및 에이전트 브릿지
@@ -178,3 +191,9 @@ task --watch test       # 파일 변경 감지 시 자동 재실행 (TDD 루프)
 - [Ollama(로컬) 사용](examples/ollama_chat/main.go)
 - [OpenAI 도구 사용](examples/openai_tools/main.go)
 - [메신저 봇 설정](docs/messenger-setup.md)
+
+---
+
+## 라이선스
+
+이 프로젝트는 [MIT License](LICENSE)를 따릅니다.

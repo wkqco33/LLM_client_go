@@ -1,4 +1,4 @@
-module llm-client-go
+module github.com/wkqco33/LLM_client_go
 
 go 1.25.0
 

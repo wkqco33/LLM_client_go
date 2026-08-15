@@ -3,8 +3,8 @@ package bots_test
 import (
 	"testing"
 
-	llm "llm-client-go"
-	"llm-client-go/bots"
+	llm "github.com/wkqco33/LLM_client_go"
+	"github.com/wkqco33/LLM_client_go/bots"
 )
 
 func TestSessionManager_AppendAndGet(t *testing.T) {

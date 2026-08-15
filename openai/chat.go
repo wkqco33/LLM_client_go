@@ -4,8 +4,8 @@ import (
 	"context"
 	"net/http"
 
-	llm "llm-client-go"
-	"llm-client-go/internal/transport"
+	llm "github.com/wkqco33/LLM_client_go"
+	"github.com/wkqco33/LLM_client_go/internal/transport"
 )
 
 // ChatService provides access to the Chat Completions endpoint.

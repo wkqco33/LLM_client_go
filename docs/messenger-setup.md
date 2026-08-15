@@ -253,9 +253,9 @@ import (
     "os"
     "os/signal"
 
-    "llm-client-go/bots"
-    discordbot "llm-client-go/bots/discord"
-    telegrambot "llm-client-go/bots/telegram"
+    "github.com/wkqco33/LLM_client_go/bots"
+    discordbot "github.com/wkqco33/LLM_client_go/bots/discord"
+    telegrambot "github.com/wkqco33/LLM_client_go/bots/telegram"
     "golang.org/x/sync/errgroup"
 )
 

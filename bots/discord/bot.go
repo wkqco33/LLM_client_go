@@ -8,7 +8,7 @@ import (
 	"strings"
 
 	"github.com/bwmarrin/discordgo"
-	"llm-client-go/bots"
+	"github.com/wkqco33/LLM_client_go/bots"
 )
 
 const resetCommand = "!reset"

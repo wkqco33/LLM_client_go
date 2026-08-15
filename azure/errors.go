@@ -6,8 +6,8 @@ import (
 	"io"
 	"net/http"
 
-	llm "llm-client-go"
-	"llm-client-go/internal/apierr"
+	llm "github.com/wkqco33/LLM_client_go"
+	"github.com/wkqco33/LLM_client_go/internal/apierr"
 )
 
 func parseErrorResponse(resp *http.Response) error {

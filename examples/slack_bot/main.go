@@ -7,9 +7,9 @@ import (
 	"os/signal"
 	"syscall"
 
-	"llm-client-go/bots"
-	slackbot "llm-client-go/bots/slack"
-	"llm-client-go/examples/internal/dotenv"
+	"github.com/wkqco33/LLM_client_go/bots"
+	slackbot "github.com/wkqco33/LLM_client_go/bots/slack"
+	"github.com/wkqco33/LLM_client_go/examples/internal/dotenv"
 )
 
 func main() {

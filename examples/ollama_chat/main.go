@@ -14,10 +14,10 @@ import (
 	"log"
 	"os"
 
-	llm "llm-client-go"
-	"llm-client-go/examples/internal/dotenv"
-	"llm-client-go/ollama"
-	"llm-client-go/openai"
+	llm "github.com/wkqco33/LLM_client_go"
+	"github.com/wkqco33/LLM_client_go/examples/internal/dotenv"
+	"github.com/wkqco33/LLM_client_go/ollama"
+	"github.com/wkqco33/LLM_client_go/openai"
 )
 
 func main() {

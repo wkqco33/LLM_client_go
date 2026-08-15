@@ -10,9 +10,9 @@ import (
 	"testing"
 	"time"
 
-	llm "llm-client-go"
-	"llm-client-go/openai"
-	"llm-client-go/retry"
+	llm "github.com/wkqco33/LLM_client_go"
+	"github.com/wkqco33/LLM_client_go/openai"
+	"github.com/wkqco33/LLM_client_go/retry"
 )
 
 // ─── 테스트 헬퍼 ──────────────────────────────────────────────

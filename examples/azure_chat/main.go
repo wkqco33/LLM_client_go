@@ -6,9 +6,9 @@ import (
 	"log"
 	"os"
 
-	llm "llm-client-go"
-	"llm-client-go/azure"
-	"llm-client-go/examples/internal/dotenv"
+	llm "github.com/wkqco33/LLM_client_go"
+	"github.com/wkqco33/LLM_client_go/azure"
+	"github.com/wkqco33/LLM_client_go/examples/internal/dotenv"
 )
 
 func main() {

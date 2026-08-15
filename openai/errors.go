@@ -6,8 +6,8 @@ import (
 	"io"
 	"net/http"
 
-	llm "llm-client-go"
-	"llm-client-go/internal/apierr"
+	llm "github.com/wkqco33/LLM_client_go"
+	"github.com/wkqco33/LLM_client_go/internal/apierr"
 )
 
 // parseErrorResponse reads an error response body and returns a structured error.

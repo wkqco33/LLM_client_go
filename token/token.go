@@ -3,7 +3,7 @@ package token
 import (
 	"unicode/utf8"
 
-	llm "llm-client-go"
+	llm "github.com/wkqco33/LLM_client_go"
 )
 
 // Counter defines the interface for token counting.

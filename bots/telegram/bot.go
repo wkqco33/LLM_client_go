@@ -8,7 +8,7 @@ import (
 	"strings"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
-	"llm-client-go/bots"
+	"github.com/wkqco33/LLM_client_go/bots"
 )
 
 const resetCommand = "/reset"

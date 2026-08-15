@@ -4,7 +4,7 @@ import (
 	"sync"
 	"time"
 
-	llm "llm-client-go"
+	llm "github.com/wkqco33/LLM_client_go"
 )
 
 const defaultMaxHistory = 20

@@ -7,8 +7,8 @@ import (
 	"net/http"
 	"time"
 
-	"llm-client-go/openai"
-	"llm-client-go/retry"
+	"github.com/wkqco33/LLM_client_go/openai"
+	"github.com/wkqco33/LLM_client_go/retry"
 )
 
 const defaultBaseURL = "http://localhost:11434/v1"

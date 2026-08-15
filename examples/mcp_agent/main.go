@@ -9,11 +9,11 @@ import (
 	"net/http/httptest"
 	"os"
 
-	llm "llm-client-go"
-	"llm-client-go/agent"
-	"llm-client-go/examples/internal/dotenv"
-	"llm-client-go/mcp"
-	"llm-client-go/openai"
+	llm "github.com/wkqco33/LLM_client_go"
+	"github.com/wkqco33/LLM_client_go/agent"
+	"github.com/wkqco33/LLM_client_go/examples/internal/dotenv"
+	"github.com/wkqco33/LLM_client_go/mcp"
+	"github.com/wkqco33/LLM_client_go/openai"
 )
 
 // ─── Mock MCP Server ──────────────────────────────────────────

@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"net/http"
 
-	llm "llm-client-go"
-	"llm-client-go/internal/sse"
+	llm "github.com/wkqco33/LLM_client_go"
+	"github.com/wkqco33/LLM_client_go/internal/sse"
 )
 
 // Stream reads a server-sent event (SSE) stream from the Azure OpenAI Chat Completions API.

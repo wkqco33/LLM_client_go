@@ -7,8 +7,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	llm "llm-client-go"
-	"llm-client-go/openai"
+	llm "github.com/wkqco33/LLM_client_go"
+	"github.com/wkqco33/LLM_client_go/openai"
 )
 
 func newTestClient(t *testing.T, handler http.HandlerFunc) (*openai.Client, *httptest.Server) {

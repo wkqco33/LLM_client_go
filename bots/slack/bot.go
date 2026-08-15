@@ -11,7 +11,7 @@ import (
 	"github.com/slack-go/slack"
 	"github.com/slack-go/slack/slackevents"
 	"github.com/slack-go/slack/socketmode"
-	"llm-client-go/bots"
+	"github.com/wkqco33/LLM_client_go/bots"
 )
 
 const resetCommand = "!reset"
@@ -45,6 +45,9 @@ type Config struct {
 
 	// Debug enables verbose Slack API logging.
 	Debug bool
+
+	// APIURL overrides the Slack API base URL (useful for testing).
+	APIURL string
 }
 
 // New creates a new Slack Bot using Socket Mode.
@@ -69,10 +72,15 @@ func New(cfg Config) (*Bot, error) {
 		logger = log.Default()
 	}
 
-	api := slack.New(cfg.BotToken,
+	apiOpts := []slack.Option{
 		slack.OptionAppLevelToken(cfg.AppToken),
 		slack.OptionDebug(cfg.Debug),
-	)
+	}
+	if cfg.APIURL != "" {
+		apiOpts = append(apiOpts, slack.OptionAPIURL(cfg.APIURL))
+	}
+
+	api := slack.New(cfg.BotToken, apiOpts...)
 
 	sm := socketmode.New(api,
 		socketmode.OptionDebug(cfg.Debug),

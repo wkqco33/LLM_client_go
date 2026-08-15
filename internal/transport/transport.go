@@ -13,7 +13,7 @@ import (
 	"net/http"
 	"time"
 
-	"llm-client-go/retry"
+	"github.com/wkqco33/LLM_client_go/retry"
 )
 
 // BuildHTTPClient resolves the *http.Client a provider should use: custom if

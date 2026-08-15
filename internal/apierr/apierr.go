@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"net/http"
 
-	llm "llm-client-go"
+	llm "github.com/wkqco33/LLM_client_go"
 )
 
 // Wrap maps statusCode to the corresponding llm sentinel error and wraps

@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	llm "llm-client-go"
+	llm "github.com/wkqco33/LLM_client_go"
 )
 
 // ─── APIError ───────────────────────────────────────────────

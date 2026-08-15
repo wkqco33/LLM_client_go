@@ -7,9 +7,9 @@ import (
 	"os/signal"
 	"syscall"
 
-	"llm-client-go/bots"
-	telegrambot "llm-client-go/bots/telegram"
-	"llm-client-go/examples/internal/dotenv"
+	"github.com/wkqco33/LLM_client_go/bots"
+	telegrambot "github.com/wkqco33/LLM_client_go/bots/telegram"
+	"github.com/wkqco33/LLM_client_go/examples/internal/dotenv"
 )
 
 func main() {

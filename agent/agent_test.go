@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	llm "llm-client-go"
-	"llm-client-go/agent"
+	llm "github.com/wkqco33/LLM_client_go"
+	"github.com/wkqco33/LLM_client_go/agent"
 )
 
 // mockClient simulates an LLM. It responds with tool calls or a final answer based on the input.

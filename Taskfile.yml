@@ -6,7 +6,7 @@
 version: "3"
 
 vars:
-  MODULE: llm-client-go
+  MODULE: github.com/wkqco33/LLM_client_go
   GOPATH:
     sh: go env GOPATH
   GOBIN: "{{.GOPATH}}/bin"

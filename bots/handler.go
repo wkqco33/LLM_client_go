@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"strings"
 
-	llm "llm-client-go"
-	"llm-client-go/azure"
-	"llm-client-go/ollama"
-	"llm-client-go/openai"
+	llm "github.com/wkqco33/LLM_client_go"
+	"github.com/wkqco33/LLM_client_go/azure"
+	"github.com/wkqco33/LLM_client_go/ollama"
+	"github.com/wkqco33/LLM_client_go/openai"
 )
 
 // Backend is the interface any LLM provider must satisfy to be used by a bot.

@@ -9,9 +9,9 @@ import (
 	"sync"
 	"testing"
 
-	llm "llm-client-go"
-	"llm-client-go/bots"
-	"llm-client-go/openai"
+	llm "github.com/wkqco33/LLM_client_go"
+	"github.com/wkqco33/LLM_client_go/bots"
+	"github.com/wkqco33/LLM_client_go/openai"
 )
 
 // ─── SessionManager: 기본 동작 ────────────────────────────────

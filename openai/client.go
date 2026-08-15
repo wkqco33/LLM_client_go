@@ -7,10 +7,10 @@ import (
 	"net/http"
 	"time"
 
-	llm "llm-client-go"
-	"llm-client-go/internal/transport"
-	"llm-client-go/retry"
-	"llm-client-go/token"
+	llm "github.com/wkqco33/LLM_client_go"
+	"github.com/wkqco33/LLM_client_go/internal/transport"
+	"github.com/wkqco33/LLM_client_go/retry"
+	"github.com/wkqco33/LLM_client_go/token"
 )
 
 const defaultBaseURL = "https://api.openai.com/v1"

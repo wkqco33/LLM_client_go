@@ -13,8 +13,8 @@ import (
 	"sync"
 	"time"
 
-	llm "llm-client-go"
-	"llm-client-go/agent"
+	llm "github.com/wkqco33/LLM_client_go"
+	"github.com/wkqco33/LLM_client_go/agent"
 )
 
 // ─── Common MCP Types ──────────────────────────────────────────

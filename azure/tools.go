@@ -1,7 +1,7 @@
 package azure
 
 import (
-	llm "llm-client-go"
+	llm "github.com/wkqco33/LLM_client_go"
 )
 
 // Message/tool constructors and stream-delta assembly re-exported from the

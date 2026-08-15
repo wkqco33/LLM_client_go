@@ -5,8 +5,8 @@ import (
 	"errors"
 	"testing"
 
-	llm "llm-client-go"
-	"llm-client-go/bots"
+	llm "github.com/wkqco33/LLM_client_go"
+	"github.com/wkqco33/LLM_client_go/bots"
 )
 
 // mockBackend is a test double for bots.Backend.
