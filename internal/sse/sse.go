@@ -9,6 +9,7 @@ import (
 	"context"
 	"net/http"
 	"strings"
+	"sync"
 )
 
 // maxLineSize bounds a single SSE line (e.g. a large streamed tool-call
@@ -21,6 +22,7 @@ type Conn struct {
 	resp    *http.Response
 	scanner *bufio.Scanner
 	done    chan struct{}
+	mu      sync.Mutex
 	closed  bool
 }
 
@@ -65,11 +67,15 @@ func (c *Conn) Next() (data string, ok bool, err error) {
 
 // Closed reports whether Close has already been called.
 func (c *Conn) Closed() bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	return c.closed
 }
 
 // Close releases the underlying response body. Safe to call multiple times.
 func (c *Conn) Close() error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	if c.closed {
 		return nil
 	}
