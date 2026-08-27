@@ -1,8 +1,6 @@
 package llm
 
-// This file collects message/tool constructors and streamed-tool-call
-// assembly that have no provider-specific behavior, so every provider
-// package can re-export them instead of reimplementing the same logic.
+// Common constructors and helpers for messages, tools, and stream assembly.
 
 // NewUserMessage creates a user-role message.
 func NewUserMessage(content string) Message {
@@ -54,8 +52,12 @@ func ForceToolChoice(functionName string) SpecificToolChoice {
 // incrementally (currently OpenAI and Azure, which share the same delta
 // shape).
 func CollectToolCalls(deltas []ToolCallDelta) []ToolCall {
-	indexed := make(map[int]*ToolCall)
-	order := []int{}
+	if len(deltas) == 0 {
+		return nil
+	}
+
+	indexed := make(map[int]*ToolCall, len(deltas))
+	order := make([]int, 0, len(deltas))
 
 	for _, d := range deltas {
 		tc, ok := indexed[d.Index]

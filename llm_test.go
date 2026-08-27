@@ -256,3 +256,136 @@ func TestUsage_JSON(t *testing.T) {
 		t.Errorf("Usage round-trip failed: %+v", back)
 	}
 }
+
+// ─── Message & Tool Helpers ───────────────────────────────────
+
+func TestMessageHelpers(t *testing.T) {
+	u := llm.NewUserMessage("user text")
+	if u.Role != llm.RoleUser || u.Content != "user text" {
+		t.Errorf("unexpected user message: %+v", u)
+	}
+
+	s := llm.NewSystemMessage("sys text")
+	if s.Role != llm.RoleSystem || s.Content != "sys text" {
+		t.Errorf("unexpected system message: %+v", s)
+	}
+
+	a := llm.NewAssistantMessage("asst text")
+	if a.Role != llm.RoleAssistant || a.Content != "asst text" {
+		t.Errorf("unexpected assistant message: %+v", a)
+	}
+
+	tr := llm.NewToolResultMessage("call_123", "tool result")
+	if tr.Role != llm.RoleTool || tr.ToolCallID != "call_123" || tr.Content != "tool result" {
+		t.Errorf("unexpected tool result message: %+v", tr)
+	}
+}
+
+func TestToolHelpers(t *testing.T) {
+	tool := llm.NewTool("lookup", "lookup data", map[string]any{"type": "object"})
+	if tool.Type != "function" || tool.Function.Name != "lookup" || tool.Function.Description != "lookup data" {
+		t.Errorf("unexpected tool: %+v", tool)
+	}
+
+	choice := llm.ForceToolChoice("lookup")
+	if choice.Type != "function" || choice.Function.Name != "lookup" {
+		t.Errorf("unexpected force tool choice: %+v", choice)
+	}
+}
+
+func TestCollectToolCalls(t *testing.T) {
+	t.Run("Empty", func(t *testing.T) {
+		got := llm.CollectToolCalls(nil)
+		if len(got) != 0 {
+			t.Errorf("expected empty slice, got %d items", len(got))
+		}
+	})
+
+	t.Run("SingleTool", func(t *testing.T) {
+		deltas := []llm.ToolCallDelta{
+			{Index: 0, ID: "call_1", Function: llm.FunctionCallDelta{Name: "get_"}},
+			{Index: 0, Function: llm.FunctionCallDelta{Name: "weather", Arguments: `{"ci`}},
+			{Index: 0, Function: llm.FunctionCallDelta{Arguments: `ty":"Seoul"}`}},
+		}
+		calls := llm.CollectToolCalls(deltas)
+		if len(calls) != 1 {
+			t.Fatalf("expected 1 call, got %d", len(calls))
+		}
+		if calls[0].ID != "call_1" || calls[0].Function.Name != "get_weather" || calls[0].Function.Arguments != `{"city":"Seoul"}` {
+			t.Errorf("unexpected call: %+v", calls[0])
+		}
+	})
+
+	t.Run("MultipleConcurrentTools", func(t *testing.T) {
+		deltas := []llm.ToolCallDelta{
+			{Index: 0, ID: "call_0", Function: llm.FunctionCallDelta{Name: "fn0", Arguments: "{"}},
+			{Index: 1, ID: "call_1", Function: llm.FunctionCallDelta{Name: "fn1", Arguments: "{"}},
+			{Index: 0, Function: llm.FunctionCallDelta{Arguments: `"a":1}`}},
+			{Index: 1, Function: llm.FunctionCallDelta{Arguments: `"b":2}`}},
+		}
+		calls := llm.CollectToolCalls(deltas)
+		if len(calls) != 2 {
+			t.Fatalf("expected 2 calls, got %d", len(calls))
+		}
+		if calls[0].ID != "call_0" || calls[0].Function.Name != "fn0" || calls[0].Function.Arguments != `{"a":1}` {
+			t.Errorf("unexpected call 0: %+v", calls[0])
+		}
+		if calls[1].ID != "call_1" || calls[1].Function.Name != "fn1" || calls[1].Function.Arguments != `{"b":2}` {
+			t.Errorf("unexpected call 1: %+v", calls[1])
+		}
+	})
+}
+
+func TestEmbedding_JSON(t *testing.T) {
+	req := llm.EmbeddingRequest{
+		Model:          "text-embedding-3-small",
+		Input:          []string{"hello", "world"},
+		EncodingFormat: "float",
+		Dimensions:     1536,
+		User:           "user-1",
+	}
+	data, err := json.Marshal(req)
+	if err != nil {
+		t.Fatalf("marshal error: %v", err)
+	}
+	var backReq llm.EmbeddingRequest
+	if err := json.Unmarshal(data, &backReq); err != nil {
+		t.Fatalf("unmarshal error: %v", err)
+	}
+	if backReq.Model != req.Model || len(backReq.Input) != 2 || backReq.Dimensions != 1536 {
+		t.Errorf("round-trip mismatch: %+v", backReq)
+	}
+
+	resp := llm.EmbeddingResponse{
+		Object: "list",
+		Data: []llm.Embedding{
+			{Object: "embedding", Embedding: []float32{0.1, 0.2, 0.3}, Index: 0},
+		},
+		Model: "text-embedding-3-small",
+		Usage: llm.Usage{PromptTokens: 5, TotalTokens: 5},
+	}
+	respData, err := json.Marshal(resp)
+	if err != nil {
+		t.Fatalf("marshal error: %v", err)
+	}
+	var backResp llm.EmbeddingResponse
+	if err := json.Unmarshal(respData, &backResp); err != nil {
+		t.Fatalf("unmarshal error: %v", err)
+	}
+	if len(backResp.Data) != 1 || len(backResp.Data[0].Embedding) != 3 {
+		t.Errorf("response round-trip mismatch: %+v", backResp)
+	}
+}
+
+func BenchmarkCollectToolCalls(b *testing.B) {
+	deltas := []llm.ToolCallDelta{
+		{Index: 0, ID: "call_0", Function: llm.FunctionCallDelta{Name: "get_weather", Arguments: `{"city":`}},
+		{Index: 1, ID: "call_1", Function: llm.FunctionCallDelta{Name: "search_db", Arguments: `{"query":`}},
+		{Index: 0, Function: llm.FunctionCallDelta{Arguments: `"Seoul"}`}},
+		{Index: 1, Function: llm.FunctionCallDelta{Arguments: `"restaurants"}`}},
+	}
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = llm.CollectToolCalls(deltas)
+	}
+}

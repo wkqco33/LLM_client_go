@@ -1,3 +1,4 @@
+// Package mcp provides client implementations (HTTP, Stdio) for the Model Context Protocol.
 package mcp
 
 import (
@@ -10,6 +11,7 @@ import (
 	"log"
 	"net/http"
 	"os/exec"
+	"strings"
 	"sync"
 	"time"
 
@@ -59,10 +61,7 @@ func NewHttpClient(baseURL string) *HttpClient {
 	}
 }
 
-// IsAlive performs a bounded-time GET against the tools endpoint to check
-// whether the MCP HTTP server is reachable. It uses its own short timeout
-// independent of the client's configured request timeout, so a hung server
-// doesn't block callers gating on liveness.
+// IsAlive performs a bounded-time GET check against the /tools endpoint.
 func (c *HttpClient) IsAlive() bool {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
@@ -139,15 +138,10 @@ const defaultStdioTimeout = 30 * time.Second
 
 // StdioConfig holds configuration for StdioClient.
 type StdioConfig struct {
-	// Timeout is the maximum time to wait for a response from the MCP server.
-	// Defaults to 30 seconds.
+	// Timeout is the maximum time to wait for a response from the MCP server (default: 30s).
 	Timeout time.Duration
 
-	// Logger receives diagnostic messages: lines from the server that
-	// couldn't be parsed as JSON-RPC, and why the read loop stopped.
-	// StdioClient is silent by default (nil Logger), matching the rest of
-	// this module — set one to make otherwise-invisible transport problems
-	// debuggable.
+	// Logger receives diagnostic messages. If nil, logging is disabled.
 	Logger *log.Logger
 }
 
@@ -395,10 +389,11 @@ func (b *toolBridge) Execute(ctx context.Context, arguments string) (string, err
 		return fmt.Sprintf("Tool execution failed: %v", err), nil
 	}
 
-	var output string
+	var sb strings.Builder
 	for _, part := range resp.Content {
-		output += part.Text
+		sb.WriteString(part.Text)
 	}
+	output := sb.String()
 
 	if resp.IsError {
 		return fmt.Sprintf("Tool returned an error: %s", output), nil

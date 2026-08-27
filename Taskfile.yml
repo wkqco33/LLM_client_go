@@ -207,6 +207,11 @@ tasks:
     cmds:
       - go test -race ./...
 
+  test:bench:
+    desc: 벤치마크 및 메모리 할당 측정
+    cmds:
+      - go test -bench=. -benchmem ./...
+
   # ─── 코드 품질 ─────────────────────────────────────────────
 
   lint:

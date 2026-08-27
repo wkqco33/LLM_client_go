@@ -339,16 +339,20 @@ func TestComplete_Error_NonJSONBody_Fallback(t *testing.T) {
 }
 
 func TestComplete_ContextCancellation(t *testing.T) {
+	reqStarted := make(chan struct{})
+	handlerDone := make(chan struct{})
+	defer close(handlerDone)
+
 	client, _ := testServer(t, func(w http.ResponseWriter, r *http.Request) {
-		// 요청을 처리하지 않고 대기 — 컨텍스트 취소로 인한 중단을 테스트
-		select {
-		case <-r.Context().Done():
-		case <-time.After(5 * time.Second):
-		}
+		close(reqStarted)
+		<-handlerDone
 	})
 
-	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
-	defer cancel()
+	ctx, cancel := context.WithCancel(context.Background())
+	go func() {
+		<-reqStarted
+		cancel()
+	}()
 
 	_, err := client.Complete(ctx, llm.ChatRequest{
 		Model:    "gpt-4o",

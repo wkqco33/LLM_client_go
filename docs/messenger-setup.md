@@ -371,12 +371,12 @@ func (b *Bot) onMessage(s *discordgo.Session, m *discordgo.MessageCreate) {
 
 ### 응답 온도(Temperature) 조정
 
-`bots/handler.go`의 `OpenAIBackend.Complete`에서 Temperature를 설정합니다.
+`bots/handler.go`의 `CommonBackend.Complete`에서 Temperature를 설정합니다.
 
 ```go
-func (b *OpenAIBackend) Complete(ctx context.Context, messages []llm.Message) (string, error) {
+func (b *CommonBackend) Complete(ctx context.Context, messages []llm.Message) (string, error) {
     temp := 0.7
-    resp, err := b.Client.Chat.Complete(ctx, openai.ChatRequest{
+    resp, err := b.Client.Complete(ctx, llm.ChatRequest{
         Model:       b.Model,
         Messages:    messages,
         Temperature: &temp,

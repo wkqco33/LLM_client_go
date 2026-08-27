@@ -4,9 +4,7 @@ import (
 	llm "github.com/wkqco33/LLM_client_go"
 )
 
-// Message/tool constructors and stream-delta assembly re-exported from the
-// root llm package, which is where the (provider-independent)
-// implementation lives.
+// Re-export common message/tool constructors from the root llm package.
 //
 // Example:
 //

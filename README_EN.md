@@ -139,6 +139,16 @@ task --watch test
 
 ---
 
+## Community & Contributing
+
+- [Contributing Guide](CONTRIBUTING.md)
+- [Agent & Developer Guide (AGENTS.md)](AGENTS.md)
+- [Security Policy](SECURITY.md)
+- [Code of Conduct](CODE_OF_CONDUCT.md)
+
+---
+
 ## License
 
 This project is licensed under the [MIT License](LICENSE).
+

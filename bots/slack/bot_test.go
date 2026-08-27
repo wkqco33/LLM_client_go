@@ -68,3 +68,23 @@ func TestNew_Success(t *testing.T) {
 		t.Errorf("got botUserID %q, want U123", bot.botUserID)
 	}
 }
+
+func TestStripMention(t *testing.T) {
+	tests := []struct {
+		input string
+		want  string
+	}{
+		{"<@U12345> hello world", "hello world"},
+		{"<@U12345>   hello   ", "hello"},
+		{"no mention here", "no mention here"},
+		{"<@U12345>", ""},
+		{"<@incomplete", "<@incomplete"},
+	}
+
+	for _, tc := range tests {
+		got := stripMention(tc.input)
+		if got != tc.want {
+			t.Errorf("stripMention(%q) = %q, want %q", tc.input, got, tc.want)
+		}
+	}
+}

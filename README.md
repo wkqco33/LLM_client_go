@@ -194,6 +194,16 @@ task --watch test       # 파일 변경 감지 시 자동 재실행 (TDD 루프)
 
 ---
 
+## 커뮤니티 및 기여하기
+
+- [기여 가이드 (Contributing Guide)](CONTRIBUTING.md)
+- [개발자 & 에이전트 가이드 (AGENTS.md)](AGENTS.md)
+- [보안 정책 (Security Policy)](SECURITY.md)
+- [행동 강령 (Code of Conduct)](CODE_OF_CONDUCT.md)
+
+---
+
 ## 라이선스
 
 이 프로젝트는 [MIT License](LICENSE)를 따릅니다.
+

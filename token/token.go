@@ -1,3 +1,4 @@
+// Package token provides token counting interfaces and heuristic token estimation.
 package token
 
 import (

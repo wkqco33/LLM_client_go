@@ -2,6 +2,8 @@ package bots_test
 
 import (
 	"testing"
+	"time"
+	"unicode/utf8"
 
 	llm "github.com/wkqco33/LLM_client_go"
 	"github.com/wkqco33/LLM_client_go/bots"
@@ -111,5 +113,77 @@ func TestSessionManager_Isolation(t *testing.T) {
 	}
 	if len(bob) != 1 || bob[0].Content != "Bob msg" {
 		t.Errorf("bob history corrupted: %v", bob)
+	}
+}
+
+func TestSplitMessage_ASCII(t *testing.T) {
+	text := "abcdefghij"
+	chunks := bots.SplitMessage(text, 4)
+	if len(chunks) != 3 {
+		t.Fatalf("expected 3 chunks, got %d: %v", len(chunks), chunks)
+	}
+	if chunks[0] != "abcd" || chunks[1] != "efgh" || chunks[2] != "ij" {
+		t.Errorf("unexpected chunks: %v", chunks)
+	}
+}
+
+func TestSplitMessage_NoSplitNeeded(t *testing.T) {
+	text := "short"
+	chunks := bots.SplitMessage(text, 10)
+	if len(chunks) != 1 || chunks[0] != "short" {
+		t.Errorf("expected single chunk, got %v", chunks)
+	}
+
+	chunksZero := bots.SplitMessage(text, 0)
+	if len(chunksZero) != 1 || chunksZero[0] != "short" {
+		t.Errorf("expected single chunk when maxLen <= 0, got %v", chunksZero)
+	}
+}
+
+func TestSplitMessage_MultibyteUTF8(t *testing.T) {
+	text := "안녕하세요 반갑습니다" // 11 runes
+	chunks := bots.SplitMessage(text, 4)
+	// Must split by runes, not slicing mid-byte
+	for i, chunk := range chunks {
+		if !utf8.ValidString(chunk) {
+			t.Errorf("chunk %d is invalid UTF-8: %q", i, chunk)
+		}
+	}
+	if len(chunks) != 3 {
+		t.Fatalf("expected 3 chunks, got %d: %v", len(chunks), chunks)
+	}
+	if chunks[0] != "안녕하세" || chunks[1] != "요 반갑" || chunks[2] != "습니다" {
+		t.Errorf("unexpected rune chunks: %v", chunks)
+	}
+}
+
+func TestSessionManager_TTL_And_Close(t *testing.T) {
+	sm := bots.NewSessionManager(bots.WithTTL(20 * time.Millisecond))
+	defer sm.Close()
+
+	sm.Append("u1", llm.Message{Role: llm.RoleUser, Content: "hi"})
+	history := sm.GetHistory("u1")
+	if len(history) != 1 {
+		t.Fatalf("expected 1 message, got %d", len(history))
+	}
+
+	// Wait for TTL expiration
+	time.Sleep(50 * time.Millisecond)
+
+	historyAfter := sm.GetHistory("u1")
+	if len(historyAfter) != 0 {
+		t.Errorf("expected history to be expired, got %d messages", len(historyAfter))
+	}
+
+	// Multiple Close calls should be safe
+	sm.Close()
+	sm.Close()
+}
+
+func BenchmarkSplitMessage(b *testing.B) {
+	text := "안녕하세요. 이것은 긴 메시지 분할 성능을 테스트하기 위한 샘플 텍스트입니다. 여러 청크로 나누어집니다."
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = bots.SplitMessage(text, 20)
 	}
 }

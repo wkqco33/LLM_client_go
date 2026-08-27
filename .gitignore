@@ -4,6 +4,17 @@ bin/
 build/
 dist/
 
+# Test coverage artifacts
+*.out
+coverage.html
+coverage.out
+*.coverprofile
+
+# IDE / Editor
+.idea/
+*.swp
+*~
+
 # Task (taskfile.dev) local checksum/state cache
 .task/
 

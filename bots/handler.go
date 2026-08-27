@@ -64,19 +64,8 @@ func (b *CommonBackend) Complete(ctx context.Context, messages []llm.Message) (s
 	return resp.Choices[0].Message.Content, nil
 }
 
-// HandleTurn processes one incoming user message against sessions/backend:
-// it detects the reset command, otherwise appends the user message, calls
-// the backend with the full history, and appends the assistant reply.
-//
-// Every platform adapter (Discord, Telegram, Slack) drove this same
-// sequence independently; it's centralized here so the behavior (including
-// which errors are returned to the caller to render) stays one
-// implementation instead of three near-identical copies.
-//
-// If the message is a reset command, wasReset is true and reply is the
-// confirmation text to send; err is always nil in that case. Otherwise,
-// reply is the assistant's response, or "" with a non-nil err if the
-// backend call failed (the caller decides how to render that failure).
+// HandleTurn processes a single user turn: handles reset commands, updates conversation
+// history, queries the backend, and returns the response.
 func HandleTurn(ctx context.Context, sessions *SessionManager, backend Backend, userID, text, resetCmd string) (reply string, wasReset bool, err error) {
 	if strings.EqualFold(text, resetCmd) {
 		sessions.Reset(userID)

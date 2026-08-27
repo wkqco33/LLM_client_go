@@ -1,7 +1,4 @@
-// Package sse provides the shared server-sent-events transport used by every
-// provider's streaming Stream implementation: scanning "data: " lines out of
-// an HTTP response body, and closing the body when either the caller calls
-// Close or the request context is cancelled.
+// Package sse provides a Server-Sent Events (SSE) reader for streaming HTTP responses.
 package sse
 
 import (
@@ -12,12 +9,10 @@ import (
 	"sync"
 )
 
-// maxLineSize bounds a single SSE line (e.g. a large streamed tool-call
-// argument delta). The bufio.Scanner default of 64KB is too small for that,
-// so every Conn raises it to 1MB.
+// maxLineSize bounds a single SSE line (1MB).
 const maxLineSize = 1 << 20
 
-// Conn scans SSE "data: " lines out of an HTTP response body.
+// Conn scans SSE "data: " lines from an HTTP response body.
 type Conn struct {
 	resp    *http.Response
 	scanner *bufio.Scanner
@@ -26,9 +21,7 @@ type Conn struct {
 	closed  bool
 }
 
-// New starts watching ctx for cancellation (closing resp.Body if it fires
-// before the stream is otherwise closed) and returns a Conn ready to read
-// SSE data lines from resp.Body.
+// New returns a Conn that scans SSE data lines from resp.Body and closes on ctx cancellation or Close.
 func New(ctx context.Context, resp *http.Response) *Conn {
 	scanner := bufio.NewScanner(resp.Body)
 	scanner.Buffer(make([]byte, 0, 64*1024), maxLineSize)

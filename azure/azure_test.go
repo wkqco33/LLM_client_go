@@ -436,15 +436,20 @@ func TestForceToolChoice(t *testing.T) {
 // ─── Context 취소 ─────────────────────────────────────────────
 
 func TestComplete_ContextCancellation(t *testing.T) {
+	reqStarted := make(chan struct{})
+	handlerDone := make(chan struct{})
+	defer close(handlerDone)
+
 	client, _ := testServer(t, func(w http.ResponseWriter, r *http.Request) {
-		select {
-		case <-r.Context().Done():
-		case <-time.After(5 * time.Second):
-		}
+		close(reqStarted)
+		<-handlerDone
 	})
 
-	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
-	defer cancel()
+	ctx, cancel := context.WithCancel(context.Background())
+	go func() {
+		<-reqStarted
+		cancel()
+	}()
 
 	_, err := client.Complete(ctx, llm.ChatRequest{
 		Model:    "gpt4",

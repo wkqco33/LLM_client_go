@@ -1,3 +1,4 @@
+// Package retry provides HTTP roundtripper middleware for automatic exponential backoff retries.
 package retry
 
 import (

@@ -97,3 +97,25 @@ func TestEstimate_MatchesDefaultCounter(t *testing.T) {
 		t.Errorf("Estimate(%q) = %d, want %d", text, got, want)
 	}
 }
+
+func BenchmarkHeuristicCounter_Count(b *testing.B) {
+	text := "The quick brown fox jumps over the lazy dog. 다람쥐 헌 쳇바퀴에 타고파."
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = DefaultCounter.Count(text)
+	}
+}
+
+func BenchmarkHeuristicCounter_CountMessages(b *testing.B) {
+	messages := []llm.Message{
+		{Role: llm.RoleSystem, Content: "You are a helpful assistant."},
+		{Role: llm.RoleUser, Content: "What is the weather today in Seoul?"},
+		{Role: llm.RoleAssistant, Content: "Let me check for you.", ToolCalls: []llm.ToolCall{
+			{ID: "call_1", Type: "function", Function: llm.FunctionCall{Name: "get_weather", Arguments: `{"city":"Seoul"}`}},
+		}},
+	}
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = DefaultCounter.CountMessages(messages)
+	}
+}

@@ -1,6 +1,4 @@
-// Package apierr provides a single, consistent mapping from HTTP status
-// codes to the sentinel errors in the root llm package, shared by every
-// provider's error-parsing code.
+// Package apierr maps HTTP status codes to sentinel errors in the root llm package.
 package apierr
 
 import (
@@ -10,10 +8,7 @@ import (
 	llm "github.com/wkqco33/LLM_client_go"
 )
 
-// Wrap maps statusCode to the corresponding llm sentinel error and wraps
-// apiErr into the resulting error chain, so callers can use both
-// errors.Is(err, llm.ErrXxx) and llm.IsAPIError(err, &target) regardless of
-// which provider produced the error.
+// Wrap maps statusCode to the corresponding llm sentinel error and wraps apiErr.
 func Wrap(statusCode int, apiErr *llm.APIError) error {
 	switch statusCode {
 	case http.StatusUnauthorized, http.StatusForbidden:

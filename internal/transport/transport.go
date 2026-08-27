@@ -16,13 +16,8 @@ import (
 	"github.com/wkqco33/LLM_client_go/retry"
 )
 
-// BuildHTTPClient resolves the *http.Client a provider should use: custom if
-// non-nil, otherwise a fresh client with the given timeout. The resulting
-// client's Transport is always wrapped with a retrying RoundTripper —
-// retry.DefaultPolicy unless policy overrides it, so a zero-config client
-// still retries transient 429/5xx failures instead of surfacing them
-// straight to the caller. To disable retries entirely, pass an explicit
-// &retry.Policy{} (MaxRetries: 0).
+// BuildHTTPClient resolves the *http.Client to use: custom if provided, otherwise a client
+// configured with the given timeout and retry policy.
 func BuildHTTPClient(custom *http.Client, timeout time.Duration, policy *retry.Policy) *http.Client {
 	hc := custom
 	if hc == nil {
@@ -36,21 +31,12 @@ func BuildHTTPClient(custom *http.Client, timeout time.Duration, policy *retry.P
 	return hc
 }
 
-// ApplyRetryPolicy wraps hc's Transport with a retrying RoundTripper
-// following policy.
+// ApplyRetryPolicy wraps hc's Transport with a retrying RoundTripper following policy.
 func ApplyRetryPolicy(hc *http.Client, policy retry.Policy) {
 	hc.Transport = retry.NewRoundTripper(hc.Transport, policy)
 }
 
-// DecodeJSON checks resp's status code: on http.StatusOK it decodes the
-// body as JSON into a new T and closes the body; on any other status it
-// delegates to parseErr(resp), which owns closing the body itself (every
-// provider's parseErrorResponse already does this, since it's also called
-// directly from streaming code paths that never reach DecodeJSON).
-//
-// This is the "do request, check status, decode JSON" tail that every
-// provider's Complete/CreateEmbeddings shared before being factored out
-// here.
+// DecodeJSON decodes a successful JSON response into type T, or returns parseErr on non-200.
 func DecodeJSON[T any](provider string, resp *http.Response, parseErr func(*http.Response) error) (*T, error) {
 	if resp.StatusCode != http.StatusOK {
 		return nil, parseErr(resp)
@@ -64,11 +50,7 @@ func DecodeJSON[T any](provider string, resp *http.Response, parseErr func(*http
 	return &result, nil
 }
 
-// Do marshals body (if non-nil) as JSON, builds a request for method/url,
-// invokes setHeaders to attach provider-specific auth/content headers, and
-// executes it on hc. Errors are wrapped with provider for context, matching
-// the "<provider>: <stage>: %w" convention every client used before this was
-// shared.
+// Do marshals body as JSON, sets custom headers, and executes the HTTP request on hc.
 func Do(ctx context.Context, hc *http.Client, provider, method, url string, body any, setHeaders func(*http.Request)) (*http.Response, error) {
 	var reqBody io.Reader
 	if body != nil {

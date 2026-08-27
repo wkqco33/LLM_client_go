@@ -27,11 +27,19 @@ jobs:
       - name: Verify Dependencies
         run: go mod verify
 
+      - name: Check Formatting
+        run: |
+          if [ -n "$(gofmt -s -l .)" ]; then
+            echo "The following files are not formatted with gofmt -s:"
+            gofmt -s -l .
+            exit 1
+          fi
+
       - name: Run go vet
         run: go vet ./...
 
-      - name: Run Tests
-        run: go test -v -race ./...
+      - name: Run Tests with Race Detector
+        run: go test -v -race -cover ./...
 
       - name: Build All Packages and Examples
         run: go build ./...

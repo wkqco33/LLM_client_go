@@ -10,10 +10,7 @@ import (
 const defaultMaxHistory = 20
 
 // SessionManager maintains per-user conversation histories in memory.
-// It is safe for concurrent use. Call Close when done with it to stop the
-// background TTL cleanup goroutine (see WithTTL) — otherwise an application
-// that creates and discards many SessionManagers will leak one goroutine per
-// instance.
+// It is safe for concurrent use. Call Close when done to stop background cleanup if TTL is enabled.
 type SessionManager struct {
 	mu         sync.RWMutex
 	sessions   map[string][]llm.Message
@@ -44,8 +41,7 @@ func WithSystemPrompt(content string) SessionOption {
 }
 
 // WithTTL sets the time-to-live for inactive sessions.
-// Sessions not accessed within the TTL are automatically removed.
-// 0 means no expiration (default).
+// Sessions not accessed within the TTL are automatically removed (0 means no expiration).
 func WithTTL(d time.Duration) SessionOption {
 	return func(sm *SessionManager) { sm.ttl = d }
 }
@@ -67,9 +63,7 @@ func NewSessionManager(opts ...SessionOption) *SessionManager {
 	return sm
 }
 
-// Close stops the background TTL cleanup goroutine started by WithTTL. It's
-// a no-op if TTL wasn't configured, and safe to call multiple times or
-// concurrently.
+// Close stops the background TTL cleanup goroutine. It is safe to call multiple times.
 func (sm *SessionManager) Close() {
 	sm.closeOnce.Do(func() {
 		close(sm.done)
@@ -140,21 +134,25 @@ func (sm *SessionManager) Reset(userID string) {
 	delete(sm.lastSeen, userID)
 }
 
-// SplitMessage splits text into chunks of at most maxLen characters, for
-// platforms with a per-message length limit (Discord: 2000, Telegram: 4096,
-// Slack: no hard API limit but very long messages should still be chunked).
-// maxLen <= 0 disables chunking.
+// SplitMessage splits text into chunks of at most maxLen runes (characters),
+// preserving UTF-8 multi-byte characters safely for platforms with message
+// limits (Discord: 2000, Telegram: 4096, Slack: 4000). maxLen <= 0 disables chunking.
 func SplitMessage(text string, maxLen int) []string {
-	if maxLen <= 0 || len(text) <= maxLen {
+	if maxLen <= 0 {
 		return []string{text}
 	}
-	var chunks []string
-	for len(text) > maxLen {
-		chunks = append(chunks, text[:maxLen])
-		text = text[maxLen:]
+	runes := []rune(text)
+	if len(runes) <= maxLen {
+		return []string{text}
 	}
-	if text != "" {
-		chunks = append(chunks, text)
+
+	chunks := make([]string, 0, (len(runes)+maxLen-1)/maxLen)
+	for len(runes) > maxLen {
+		chunks = append(chunks, string(runes[:maxLen]))
+		runes = runes[maxLen:]
+	}
+	if len(runes) > 0 {
+		chunks = append(chunks, string(runes))
 	}
 	return chunks
 }

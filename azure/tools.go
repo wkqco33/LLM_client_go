@@ -4,10 +4,7 @@ import (
 	llm "github.com/wkqco33/LLM_client_go"
 )
 
-// Message/tool constructors and stream-delta assembly re-exported from the
-// root llm package, which is where the (provider-independent)
-// implementation lives. CollectToolCalls applies here because Azure OpenAI
-// streams tool-call arguments in the same delta shape as OpenAI.
+// Re-export common message/tool constructors from the root llm package.
 var (
 	NewUserMessage       = llm.NewUserMessage
 	NewSystemMessage     = llm.NewSystemMessage

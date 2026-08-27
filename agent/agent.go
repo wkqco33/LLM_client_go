@@ -1,3 +1,4 @@
+// Package agent provides a multi-turn conversation loop with automated tool execution.
 package agent
 
 import (
@@ -128,12 +129,7 @@ func (r *Runner) Run(ctx context.Context, userMessages []llm.Message) ([]llm.Mes
 			return messages, resp, nil
 		}
 
-		// Execute all requested tool calls in parallel — the model can ask
-		// for several independent tools in one turn (e.g. weather + search),
-		// and there's no reason to pay their latency sequentially. Each
-		// goroutine writes only to its own slice index, so results land in
-		// results[i] regardless of completion order; they're appended to
-		// messages in the original tool_calls order afterward.
+		// Execute tool calls in parallel and preserve order in results.
 		results := make([]llm.Message, len(assistantMsg.ToolCalls))
 		var wg sync.WaitGroup
 		for i, tc := range assistantMsg.ToolCalls {
@@ -150,11 +146,7 @@ func (r *Runner) Run(ctx context.Context, userMessages []llm.Message) ([]llm.Mes
 	return messages, nil, fmt.Errorf("%w: reached %d turns without a final response", ErrMaxTurnsExceeded, r.maxTurn)
 }
 
-// executeToolCall runs a single tool call and turns the outcome (including a
-// missing tool or an execution error) into a RoleTool message. Errors are
-// never returned to the caller here — they're surfaced to the model as
-// message content so it has a chance to react (retry, apologize, try a
-// different tool) instead of aborting the whole run.
+// executeToolCall executes a single tool call and wraps the result or error into a RoleTool message.
 func (r *Runner) executeToolCall(ctx context.Context, tc llm.ToolCall) llm.Message {
 	tool, ok := r.tools[tc.Function.Name]
 	if !ok {
