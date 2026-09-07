@@ -3,6 +3,7 @@ package llm
 
 import (
 	"context"
+	"encoding/json"
 )
 
 // Client is the interface for an LLM provider.
@@ -42,11 +43,84 @@ const (
 
 // Message represents a single chat message.
 type Message struct {
-	Role       Role       `json:"role"`
-	Content    string     `json:"content"`
-	ToolCalls  []ToolCall `json:"tool_calls,omitempty"`
-	ToolCallID string     `json:"tool_call_id,omitempty"`
-	Name       string     `json:"name,omitempty"`
+	Role Role `json:"role"`
+	// Content remains a string for source compatibility with text messages.
+	Content string `json:"-"`
+	// ContentParts holds multimodal content such as text and images. When it is
+	// non-empty, Content is serialized as the provider's content-part array.
+	ContentParts []ContentPart `json:"-"`
+	ToolCalls    []ToolCall    `json:"tool_calls,omitempty"`
+	ToolCallID   string        `json:"tool_call_id,omitempty"`
+	Name         string        `json:"name,omitempty"`
+}
+
+// ContentPart is one item in a multimodal message.
+type ContentPart struct {
+	Type     string    `json:"type"`
+	Text     string    `json:"text,omitempty"`
+	ImageURL *ImageURL `json:"image_url,omitempty"`
+}
+
+// ImageURL identifies an image supplied to a vision-capable model. URL may be
+// an https URL or a data URL such as data:image/png;base64,... .
+type ImageURL struct {
+	URL    string `json:"url"`
+	Detail string `json:"detail,omitempty"`
+}
+
+// MarshalJSON uses the OpenAI-compatible string-or-array content field while
+// keeping the public string Content field backwards compatible.
+func (m Message) MarshalJSON() ([]byte, error) {
+	type messageFields struct {
+		Role       Role       `json:"role"`
+		Content    any        `json:"content"`
+		ToolCalls  []ToolCall `json:"tool_calls,omitempty"`
+		ToolCallID string     `json:"tool_call_id,omitempty"`
+		Name       string     `json:"name,omitempty"`
+	}
+
+	content := any(m.Content)
+	if len(m.ContentParts) > 0 {
+		content = m.ContentParts
+	}
+	return json.Marshal(messageFields{
+		Role:       m.Role,
+		Content:    content,
+		ToolCalls:  m.ToolCalls,
+		ToolCallID: m.ToolCallID,
+		Name:       m.Name,
+	})
+}
+
+// UnmarshalJSON accepts both the normal string response and a multimodal
+// content array returned by OpenAI-compatible providers.
+func (m *Message) UnmarshalJSON(data []byte) error {
+	type messageFields struct {
+		Role       Role            `json:"role"`
+		Content    json.RawMessage `json:"content"`
+		ToolCalls  []ToolCall      `json:"tool_calls,omitempty"`
+		ToolCallID string          `json:"tool_call_id,omitempty"`
+		Name       string          `json:"name,omitempty"`
+	}
+
+	var fields messageFields
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return err
+	}
+
+	*m = Message{
+		Role:       fields.Role,
+		ToolCalls:  fields.ToolCalls,
+		ToolCallID: fields.ToolCallID,
+		Name:       fields.Name,
+	}
+	if len(fields.Content) == 0 || string(fields.Content) == "null" {
+		return nil
+	}
+	if err := json.Unmarshal(fields.Content, &m.Content); err == nil {
+		return nil
+	}
+	return json.Unmarshal(fields.Content, &m.ContentParts)
 }
 
 // ChatRequest is the input for a chat completion.

@@ -149,3 +149,49 @@ func TestChatComplete_WithTools(t *testing.T) {
 		t.Errorf("expected 1 tool call, got %d", len(resp.Choices[0].Message.ToolCalls))
 	}
 }
+
+func TestChatComplete_WithImage(t *testing.T) {
+	client, _ := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Messages []struct {
+				Content []struct {
+					Type     string `json:"type"`
+					Text     string `json:"text"`
+					ImageURL *struct {
+						URL string `json:"url"`
+					} `json:"image_url"`
+				} `json:"content"`
+			} `json:"messages"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Errorf("decode request: %v", err)
+		}
+		if len(body.Messages) != 1 || len(body.Messages[0].Content) != 2 {
+			t.Fatalf("unexpected multimodal request: %+v", body)
+		}
+		parts := body.Messages[0].Content
+		if parts[0].Type != "text" || parts[0].Text != "What is this?" {
+			t.Errorf("unexpected text part: %+v", parts[0])
+		}
+		if parts[1].Type != "image_url" || parts[1].ImageURL == nil ||
+			parts[1].ImageURL.URL != "data:image/png;base64,abc" {
+			t.Errorf("unexpected image part: %+v", parts[1])
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"choices":[{"message":{"role":"assistant","content":"A cat"}}]}`))
+	})
+
+	resp, err := client.Complete(context.Background(), llm.ChatRequest{
+		Model: "llava",
+		Messages: []llm.Message{llm.NewUserMessageWithParts(
+			llm.TextContent("What is this?"),
+			llm.ImageContent("data:image/png;base64,abc"),
+		)},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if resp.Choices[0].Message.Content != "A cat" {
+		t.Errorf("unexpected response: %q", resp.Choices[0].Message.Content)
+	}
+}

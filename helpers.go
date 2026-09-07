@@ -2,9 +2,35 @@ package llm
 
 // Common constructors and helpers for messages, tools, and stream assembly.
 
+import "encoding/base64"
+
 // NewUserMessage creates a user-role message.
 func NewUserMessage(content string) Message {
 	return Message{Role: RoleUser, Content: content}
+}
+
+// TextContent creates a text part for a multimodal message.
+func TextContent(text string) ContentPart {
+	return ContentPart{Type: "text", Text: text}
+}
+
+// ImageContent creates an image part from an https or data URL.
+func ImageContent(url string) ContentPart {
+	return ContentPart{
+		Type:     "image_url",
+		ImageURL: &ImageURL{URL: url},
+	}
+}
+
+// ImageContentData creates an image part from raw image bytes. mediaType
+// should be an image MIME type such as image/png or image/jpeg.
+func ImageContentData(data []byte, mediaType string) ContentPart {
+	return ImageContent("data:" + mediaType + ";base64," + base64.StdEncoding.EncodeToString(data))
+}
+
+// NewUserMessageWithParts creates a user message containing text and/or images.
+func NewUserMessageWithParts(parts ...ContentPart) Message {
+	return Message{Role: RoleUser, ContentParts: parts}
 }
 
 // NewSystemMessage creates a system-role message.

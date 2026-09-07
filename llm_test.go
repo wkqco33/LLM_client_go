@@ -140,6 +140,56 @@ func TestMessage_JSON_UserMessage(t *testing.T) {
 	}
 }
 
+func TestMessage_JSON_MultimodalMessage(t *testing.T) {
+	msg := llm.NewUserMessageWithParts(
+		llm.TextContent("Describe this image"),
+		llm.ImageContent("data:image/png;base64,abc123"),
+	)
+	data, err := json.Marshal(msg)
+	if err != nil {
+		t.Fatalf("marshal error: %v", err)
+	}
+
+	var body struct {
+		Role    string            `json:"role"`
+		Content []json.RawMessage `json:"content"`
+	}
+	if err := json.Unmarshal(data, &body); err != nil {
+		t.Fatalf("expected content array: %v; json=%s", err, data)
+	}
+	if body.Role != "user" || len(body.Content) != 2 {
+		t.Fatalf("unexpected multimodal message: %s", data)
+	}
+	if !strings.Contains(string(data), `"type":"image_url"`) ||
+		!strings.Contains(string(data), "data:image/png;base64,abc123") {
+		t.Errorf("image part missing from JSON: %s", data)
+	}
+
+	var back llm.Message
+	if err := json.Unmarshal(data, &back); err != nil {
+		t.Fatalf("unmarshal error: %v", err)
+	}
+	if back.Role != llm.RoleUser || len(back.ContentParts) != 2 {
+		t.Fatalf("unexpected round-trip message: %+v", back)
+	}
+	if back.ContentParts[0].Text != "Describe this image" {
+		t.Errorf("unexpected text part: %+v", back.ContentParts[0])
+	}
+	if back.ContentParts[1].ImageURL == nil || back.ContentParts[1].ImageURL.URL != "data:image/png;base64,abc123" {
+		t.Errorf("unexpected image part: %+v", back.ContentParts[1])
+	}
+}
+
+func TestImageContentData(t *testing.T) {
+	part := llm.ImageContentData([]byte("image"), "image/png")
+	if part.Type != "image_url" || part.ImageURL == nil {
+		t.Fatalf("unexpected image part: %+v", part)
+	}
+	if part.ImageURL.URL != "data:image/png;base64,aW1hZ2U=" {
+		t.Errorf("unexpected data URL: %q", part.ImageURL.URL)
+	}
+}
+
 func TestMessage_JSON_OmitsEmptyFields(t *testing.T) {
 	msg := llm.Message{Role: llm.RoleAssistant, Content: "Hi"}
 	data, _ := json.Marshal(msg)

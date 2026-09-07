@@ -66,6 +66,37 @@ resp, err := client.Complete(ctx, llm.ChatRequest{
 })
 ```
 
+### 이미지 입력 (Vision 모델)
+
+OpenAI 호환 Vision 모델에는 텍스트와 이미지 content part를 함께 전달할 수 있습니다.
+Ollama에서는 `llava`, `llama3.2-vision` 등의 Vision 모델을 사용합니다.
+
+```go
+dataURL := "data:image/png;base64,..."
+resp, err := client.Complete(ctx, llm.ChatRequest{
+    Model: "llava",
+    Messages: []llm.Message{
+        llm.NewUserMessageWithParts(
+            llm.TextContent("이 이미지를 설명해줘"),
+            llm.ImageContent(dataURL),
+        ),
+    },
+})
+```
+
+파일 바이트를 직접 data URL로 변환할 때는 `ImageContentData`를 사용합니다.
+
+```go
+part := llm.ImageContentData(imageBytes, "image/jpeg")
+message := llm.NewUserMessageWithParts(
+    llm.TextContent("이 사진의 내용을 설명해줘"),
+    part,
+)
+```
+
+일반 텍스트 메시지의 `Message.Content` 필드는 그대로 유지됩니다. 멀티모달
+메시지는 요청 JSON에서 OpenAI 호환 `content` 배열로 직렬화됩니다.
+
 ---
 
 ## 2. 에이전트 및 도구 자동화
@@ -206,4 +237,3 @@ task --watch test       # 파일 변경 감지 시 자동 재실행 (TDD 루프)
 ## 라이선스
 
 이 프로젝트는 [MIT License](LICENSE)를 따릅니다.
-
